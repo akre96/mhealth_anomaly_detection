@@ -1,0 +1,26 @@
+{
+    "model": {
+        "Linear Regression": "#718093",
+        "Random Forest Regression": "#192a56",
+        "Gradient Boosting Regression": "#487eb0",
+        "Mixed Effects Random Forest": "#AF58BA",
+        "Baseline": "#1A1A1A",
+        "Logistic Regression": "#718093",
+        "Random Forest Classifier": "#192a56",
+        "Gradient Boosting Classifier": "#487eb0"
+    },
+    "features": {
+        "active_energy_burned": "#228833", 
+        "total_sleep_time": "#AA3377",
+        "hrv_mean": "#663333",
+        "hr_resting": "#BB5566",
+        "mesor": "#BB5566",
+        "amplitude": "#BB5566",
+        "acrophase": "#BB5566",
+        "period": "#BB5566",
+        "cost": "#BB5566",
+        "n": "#BB5566",
+        "hours_with_data": "#555555",
+        "ema_sad_choices": "#004488"
+    }
+}
