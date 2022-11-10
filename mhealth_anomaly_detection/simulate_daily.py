@@ -184,9 +184,7 @@ class RandomAnomalySimulator(BaseDailyDataSimulator):
         feature_params: Dict[str, Dict],
         n_days: int = 60,
         n_subjects: int = 2,
-        sim_type: str = 'base',
-        anomaly_frequency: int = 7,
-        anomaly_std_scale: float = 2,
+        sim_type: str = 'weeklyAnomaly',
     ):
         BaseDailyDataSimulator.__init__(
             self,
@@ -195,8 +193,12 @@ class RandomAnomalySimulator(BaseDailyDataSimulator):
             n_subjects,
             sim_type,
         )
-        self.anomaly_frequency = anomaly_frequency
-        self.anomaly_std_scale = anomaly_std_scale
+        for feature, params in self.feature_params.items():
+            if ('anomaly_frequency' not in params.keys()) or ('anomaly_std_scale' not in params.keys()):
+                raise ValueError(
+                    feature
+                    + ' Anomaly frequency and scale not specified'
+                )
 
     def generateSubjectData(
         self,
@@ -227,13 +229,14 @@ class RandomAnomalySimulator(BaseDailyDataSimulator):
                 
                 # If anomaly day -> increase std and set around mean
                 is_anomaly_day = (
-                    (not (i % self.anomaly_frequency)) and
-                    (i >= self.anomaly_frequency)
+                    (params['anomaly_frequency'] > 0) and
+                    (not (i % params['anomaly_frequency'])) and
+                    (i >= params['anomaly_frequency'])
                 )
                 if is_anomaly_day:
                     f_data[i] = self.genDailyFeature(
                         history=None,
-                        std=params['std'] * self.anomaly_std_scale,
+                        std=params['std'] * params['anomaly_std_scale'],
                         max=params['max'],
                         min=params['min'],
                         init_value=params['mean'],
@@ -248,15 +251,6 @@ class RandomAnomalySimulator(BaseDailyDataSimulator):
             data_dict[feature] = f_data
         return pd.DataFrame(data_dict)
 
-    def genDatasetFilename(self) -> str:
-        return '_'.join([
-                self.sim_type,
-                'nSubject-'+str(self.n_subjects),
-                'nDay-'+str(self.n_days),
-                'anomalyFreq-'+str(self.anomaly_frequency),
-                'anomalyStdScale-'+str(self.anomaly_std_scale),
-            ]) + '.csv'
-
 
 if __name__ == '__main__':
     n_subjects = 2
@@ -264,11 +258,11 @@ if __name__ == '__main__':
     sim_type = 'base'
 
     with open('lib/feature_parameters.json', 'r') as fp:
-        feature_params = json.load(fp)[sim_type]
+        feature_params = json.load(fp)
 
     print('Simulating base with no anomaly')
     simulator = BaseDailyDataSimulator(
-        feature_params=feature_params,
+        feature_params=feature_params[sim_type],
         n_days=n_days,
         n_subjects=n_subjects,
         sim_type=sim_type
@@ -277,14 +271,25 @@ if __name__ == '__main__':
     print('\nPreview of data: ')
     print(data.head(n=10))
 
+    sim_type = 'weeklyAnomaly'
     print('Simulating base with weekly anomalies')
     simulator = RandomAnomalySimulator(
-        feature_params=feature_params,
+        feature_params=feature_params[sim_type],
         n_days=n_days,
         n_subjects=n_subjects,
         sim_type=sim_type,
-        anomaly_frequency=7,
-        anomaly_std_scale=2,
+    )
+    data = simulator.simulateData(use_cache=False)
+    print('\nPreview of data: ')
+    print(data.head(n=10))
+
+    sim_type = 'weeklyAnomalyActiveEnergy'
+    print('Simulating weekly anomalies only in PAEE')
+    simulator = RandomAnomalySimulator(
+        feature_params=feature_params[sim_type],
+        n_days=n_days,
+        n_subjects=n_subjects,
+        sim_type=sim_type,
     )
     data = simulator.simulateData(use_cache=False)
     print('\nPreview of data: ')

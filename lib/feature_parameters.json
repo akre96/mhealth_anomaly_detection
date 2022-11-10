@@ -1,7 +1,6 @@
 
 {
     "base": {
-
         "active_energy_burned": {
             "min": 0,
             "max": 3000,
@@ -29,6 +28,82 @@
             "mean": 90,
             "std": 20,
             "history_len": 2
+        }
+    },
+    "weeklyAnomaly": {
+        "active_energy_burned": {
+            "min": 0,
+            "max": 3000,
+            "mean": 400,
+            "std": 100,
+            "history_len": 7,
+            "anomaly_frequency": 7,
+            "anomaly_std_scale": 2
+        },
+        "total_sleep_time": {
+            "min": 0,
+            "max": 16,
+            "mean": 6,
+            "std": 1,
+            "history_len": 14,
+            "anomaly_frequency": 7,
+            "anomaly_std_scale": 2
+        },
+        "hr_resting": {
+            "min": 20,
+            "max": 200,
+            "mean": 60,
+            "std": 10,
+            "history_len": 28,
+            "anomaly_frequency": 7,
+            "anomaly_std_scale": 2
+        },
+        "hrv_mean": {
+            "min": 10,
+            "max": 200,
+            "mean": 90,
+            "std": 20,
+            "history_len": 2,
+            "anomaly_frequency": 7,
+            "anomaly_std_scale": 2
+        }
+    },
+    "weeklyAnomalyActiveEnergy": {
+        "active_energy_burned": {
+            "min": 0,
+            "max": 3000,
+            "mean": 400,
+            "std": 100,
+            "history_len": 7,
+            "anomaly_frequency": 7,
+            "anomaly_std_scale": 2
+        },
+        "total_sleep_time": {
+            "min": 0,
+            "max": 16,
+            "mean": 6,
+            "std": 1,
+            "history_len": 14,
+            "anomaly_frequency": 0,
+            "anomaly_std_scale": 0
+        },
+        "hr_resting": {
+            "min": 20,
+            "max": 200,
+            "mean": 60,
+            "std": 10,
+            "history_len": 28,
+            "anomaly_frequency": 0,
+            "anomaly_std_scale": 0
+        },
+        "hrv_mean": {
+            "min": 10,
+            "max": 200,
+            "mean": 90,
+            "std": 20,
+            "history_len": 2,
+            "anomaly_frequency": 0,
+            "anomaly_std_scale": 0
         }
     }
 }
