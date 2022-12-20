@@ -13,12 +13,14 @@ class BaseDailyDataSimulator:
         feature_params: Dict[str, Dict],
         n_days: int = 60,
         n_subjects: int = 2,
-        sim_type: str = 'base'
+        sim_type: str = 'base',
+        cache_simulation: bool = True,
     ):
         self.feature_params = feature_params
         self.n_days = n_days
         self.n_subjects = n_subjects
         self.sim_type = sim_type
+        self.cache_simulation = cache_simulation
 
     @staticmethod
     def genDailyFeature(
@@ -44,7 +46,7 @@ class BaseDailyDataSimulator:
             float: next days feature value
         """
         # Center next value on historical mean, ignore NaNs
-        if np.any(history):
+        if np.any(~np.isnan(history)):
             loc = np.nanmean(history)
         elif init_value is not None:
             loc = init_value
@@ -81,10 +83,7 @@ class BaseDailyDataSimulator:
             (feature_df.max() - feature_df.min())
 
         # Each feature weighted equally for depressed mood
-        sad_ema = norm_features['hr_resting'] \
-            - norm_features['active_energy_burned'] \
-            - norm_features['hrv_mean'] \
-            - norm_features['total_sleep_time']
+        sad_ema = norm_features[self.feature_params.keys()].sum(axis=1)
 
         # daily depressed mood is a simple summation scaled between 0 and 3
         sad_ema = 3 * (
@@ -168,10 +167,12 @@ class BaseDailyDataSimulator:
                 subject_data['ema_sad_choices'] = self.calcSadEMA(subject_data)
                 sim_data.append(subject_data)
 
-            # Save data
             sim_data = pd.concat(sim_data)
-            sim_data.to_csv(out_path, index=False)
-            print('\tSaved data to:', out_path)
+
+            # Save data
+            if self.cache_simulation:
+                sim_data.to_csv(out_path, index=False)
+                print('\tSaved data to:', out_path)
             return sim_data
 
 
@@ -185,6 +186,7 @@ class RandomAnomalySimulator(BaseDailyDataSimulator):
         n_days: int = 60,
         n_subjects: int = 2,
         sim_type: str = 'weeklyAnomaly',
+        cache_simulation: bool = True,
     ):
         BaseDailyDataSimulator.__init__(
             self,
@@ -192,6 +194,7 @@ class RandomAnomalySimulator(BaseDailyDataSimulator):
             n_days,
             n_subjects,
             sim_type,
+            cache_simulation,
         )
         for feature, params in self.feature_params.items():
             if ('anomaly_frequency' not in params.keys()) or ('anomaly_std_scale' not in params.keys()):
@@ -255,42 +258,31 @@ class RandomAnomalySimulator(BaseDailyDataSimulator):
 if __name__ == '__main__':
     n_subjects = 2
     n_days = 60
-    sim_type = 'base'
 
     with open('lib/feature_parameters.json', 'r') as fp:
-        feature_params = json.load(fp)
+        all_feature_params = json.load(fp)
 
-    print('Simulating base with no anomaly')
-    simulator = BaseDailyDataSimulator(
-        feature_params=feature_params[sim_type],
-        n_days=n_days,
-        n_subjects=n_subjects,
-        sim_type=sim_type
-    )
-    data = simulator.simulateData()
-    print('\nPreview of data: ')
-    print(data.head(n=10))
+    for sim_type, feature_params in all_feature_params.items():
+        if sim_type == 'base':
+            print('Simulating base with no anomaly')
+            simulator = BaseDailyDataSimulator(
+                feature_params=all_feature_params[sim_type],
+                n_days=n_days,
+                n_subjects=n_subjects,
+                sim_type=sim_type
+            )
+            data = simulator.simulateData()
+            print('\nPreview of data: ')
+            print(data.head(n=10))
 
-    sim_type = 'weeklyAnomaly'
-    print('Simulating base with weekly anomalies')
-    simulator = RandomAnomalySimulator(
-        feature_params=feature_params[sim_type],
-        n_days=n_days,
-        n_subjects=n_subjects,
-        sim_type=sim_type,
-    )
-    data = simulator.simulateData(use_cache=False)
-    print('\nPreview of data: ')
-    print(data.head(n=10))
-
-    sim_type = 'weeklyAnomalyActiveEnergy'
-    print('Simulating weekly anomalies only in PAEE')
-    simulator = RandomAnomalySimulator(
-        feature_params=feature_params[sim_type],
-        n_days=n_days,
-        n_subjects=n_subjects,
-        sim_type=sim_type,
-    )
-    data = simulator.simulateData(use_cache=False)
-    print('\nPreview of data: ')
-    print(data.head(n=10))
+        else:
+            print('Simulating', sim_type)
+            simulator = RandomAnomalySimulator(
+                feature_params=feature_params,
+                n_days=n_days,
+                n_subjects=n_subjects,
+                sim_type=sim_type,
+            )
+            data = simulator.simulateData(use_cache=False)
+            print('\nPreview of data: ')
+            print(data.head(n=10))

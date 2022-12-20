@@ -1,0 +1,1 @@
+# TODO: Test that base detector and randomAnomaly have same output if 'base' feature params passed

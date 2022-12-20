@@ -21,6 +21,7 @@
         "cost": "#BB5566",
         "n": "#BB5566",
         "hours_with_data": "#555555",
-        "ema_sad_choices": "#004488"
+        "ema_sad_choices": "#004488",
+        "total_re": "gray"
     }
 }
