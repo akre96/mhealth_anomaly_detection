@@ -24,13 +24,13 @@ def lineplot_features(
         palette = lr.get_colors()
 
     fig, axes = plt.subplots(
-        figsize=(width, 2*len(plot_features)),
+        figsize=(width, 1.25*len(plot_features)),
         nrows=len(plot_features),
         ncols=1,
-        sharex=True
+        sharex=True,
+        constrained_layout=True,
     )
 
-    plt.subplots_adjust(hspace=.6)
     for i, f in enumerate(plot_features):
         ax = axes[i]
         if f not in palette['features']:
@@ -70,7 +70,7 @@ def lineplot_features(
             ylims = ax.get_ylim()
             ax.vlines(anomaly_days, *ylims, lw=4, color='red', alpha=.5)
             ax.set_ylim(*ylims)
-        fa.despine_thicken_axes(ax, fontsize=20, lw=6)
+        fa.despine_thicken_axes(ax, fontsize=20, lw=4)
     return fig, axes
 
 
