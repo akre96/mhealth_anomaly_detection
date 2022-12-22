@@ -42,17 +42,21 @@ def lineplot_features(
             color = 'gray'
         else:
             color = palette['features'][f]
+        
+        data[f] = pd.to_numeric(data[f], errors='coerce')
         kwargs = {
-            'x': time_col,
-            'y': f,
+            'x': data.dropna(subset=[f])[time_col],
+            'y': data.dropna(subset=[f])[f],
             'color': color,
             'ax': ax,
-            'data': data,
         }
+
         if hue is not None:
-            kwargs['hue'] = hue
+            kwargs['hue'] = data[hue]
             kwargs.pop('color')
+
         sns.lineplot(**kwargs)
+
         if scatter:
             sns.scatterplot(**kwargs)
         if f == 'ema_sad_choices':

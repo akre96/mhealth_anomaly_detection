@@ -31,7 +31,32 @@ class CrossCheck:
         self.behavior_cols = [f for f in self.feature_cols if 'ema' not in f]
 
         # Preprocess data
-        self.data = self.preprocess()
+        self.data = self.fill_empty_days(self.preprocess()).fillna(np.nan)
+
+    @staticmethod
+    def fill_empty_days(
+        data: pd.DataFrame
+    ) -> pd.DataFrame:
+        expected_rows = []
+        for (eid, sid), s_df in data.groupby(['eureka_id', 'subject_id']):
+            min_d = s_df.study_day.min()
+            max_d = s_df.study_day.max()
+            n_days = 1 + max_d - min_d
+            expected_rows.append(
+                pd.DataFrame({
+                    'subject_id': [sid] * n_days,
+                    'eureka_id': [eid] * n_days,
+                    'study_day': np.arange(min_d, max_d + 1)
+                })
+            )
+            if expected_rows[-1].shape[0] != s_df.shape[0]:
+                print('Empty rows added for:', sid, eid, expected_rows[-1].shape[0], s_df.shape[0])
+
+        return data.merge(
+            pd.concat(expected_rows),
+            how='right',
+            validate='1:1',
+        )
 
     def preprocess(
         self,

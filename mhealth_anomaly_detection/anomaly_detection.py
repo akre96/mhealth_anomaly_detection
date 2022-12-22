@@ -11,12 +11,14 @@ class BaseRollingAnomalyDetector:
         self,
         features: list,
         window_size: int = 7,
+        max_missing_days: int = 2,
         model: Any = Pipeline([
             ('scaler', StandardScaler()),
             ('pca', PCA(n_components=3, whiten=True))
         ]),
     ):
         self.window_size = window_size
+        self.max_missing_days = max_missing_days
         self.model = model
         self.features = features
     
@@ -24,17 +26,24 @@ class BaseRollingAnomalyDetector:
         self,
         subject_data: pd.DataFrame,
     ) -> Tuple[pd.DataFrame, np.ndarray]:
-
         # data validation
         if 'subject_id' not in subject_data:
             raise ValueError('Subject data must have column subject_id')
         if subject_data.subject_id.nunique() != 1:
             raise ValueError('Subject data must have only one unique subject_id')
 
+        day_range = subject_data.study_day.max() - subject_data.study_day.min()
+        if subject_data.shape[0] != day_range+1:
+            raise ValueError('Subject data must have a row for every day even if missing feature values')
+        
+        # Sort values
+        subject_data.sort_values(by='study_day', inplace=True)
+
         # initialize columns names with features + _re
         df_cols = [
             '{}_re'.format(feature) for feature in self.features
         ]
+
         # empty df with null values to place RE in to
         re_df = pd.DataFrame(
             data=np.full((subject_data.shape[0], len(df_cols)), np.nan),
@@ -46,14 +55,19 @@ class BaseRollingAnomalyDetector:
             ),
             np.nan
         )
+
         # Calculate reconstruction error for each day
         for i in range(subject_data.shape[0]):
             # RE only calculated with sufficient historical data
-            if i > self.window_size:
+            if i > (self.window_size):
                 # Train on window_size days
-                train = subject_data.iloc[i - self.window_size:i]
+                train = subject_data.iloc[i - self.window_size:i].dropna(
+                    subset=self.features
+                )
+                if train.shape[0] < (self.window_size - self.max_missing_days):
+                    continue
                 self.model.fit(train[self.features])
-                components[i, :, :] = self.model.named_steps['pca'].components_
+                pca_components[i, :, :] = self.model.named_steps['pca'].components_
 
                 # Training set + next day reconstructed
                 X = subject_data.iloc[i - self.window_size: i+1][self.features]
