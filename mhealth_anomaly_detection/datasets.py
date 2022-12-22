@@ -49,8 +49,10 @@ class CrossCheck:
                     'study_day': np.arange(min_d, max_d + 1)
                 })
             )
-            if expected_rows[-1].shape[0] != s_df.shape[0]:
-                print('Empty rows added for:', sid, eid, expected_rows[-1].shape[0], s_df.shape[0])
+
+            # Uncomment to show effect of adding rows
+            # if expected_rows[-1].shape[0] != s_df.shape[0]:
+            #     print('Empty rows added for:', sid, eid, expected_rows[-1].shape[0], s_df.shape[0])
 
         return data.merge(
             pd.concat(expected_rows),

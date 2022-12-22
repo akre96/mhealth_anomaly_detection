@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 # TODO: Test that base detector and randomAnomaly have same output if 'base' feature params passed
 
-N_DAYS = 5
+N_DAYS = 10
 N_FEATURES = 3
 FEATURES = {
     f'example_feature_{i}': np.arange(N_DAYS)*i for i in range(N_FEATURES)

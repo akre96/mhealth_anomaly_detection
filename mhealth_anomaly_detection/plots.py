@@ -44,9 +44,10 @@ def lineplot_features(
             color = palette['features'][f]
         
         data[f] = pd.to_numeric(data[f], errors='coerce')
+        data[time_col] = pd.to_numeric(data[time_col], errors='coerce')
         kwargs = {
-            'x': data.dropna(subset=[f])[time_col],
-            'y': data.dropna(subset=[f])[f],
+            'x': data.dropna(subset=[f])[time_col].astype(float),
+            'y': data.dropna(subset=[f])[f].astype(float),
             'color': color,
             'ax': ax,
         }
@@ -55,7 +56,8 @@ def lineplot_features(
             kwargs['hue'] = data[hue]
             kwargs.pop('color')
 
-        sns.lineplot(**kwargs)
+        # Weird matplotlib error around datatypes here
+        #sns.lineplot(**kwargs)
 
         if scatter:
             sns.scatterplot(**kwargs)

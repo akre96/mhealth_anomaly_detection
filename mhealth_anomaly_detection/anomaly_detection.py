@@ -12,14 +12,15 @@ class BaseRollingAnomalyDetector:
         features: list,
         window_size: int = 7,
         max_missing_days: int = 2,
-        model: Any = Pipeline([
-            ('scaler', StandardScaler()),
-            ('pca', PCA(n_components=3, whiten=True))
-        ]),
+        n_components: int = 3,
     ):
+        self.n_components = n_components
+        self.model = Pipeline([
+                    ('scaler', StandardScaler()),
+                    ('pca', PCA(n_components=n_components, whiten=True))
+                ])
         self.window_size = window_size
         self.max_missing_days = max_missing_days
-        self.model = model
         self.features = features
     
     def getReconstructionError(
@@ -51,7 +52,7 @@ class BaseRollingAnomalyDetector:
         )
         pca_components = np.full(
             (
-                subject_data.shape[0], 3, len(df_cols)
+                subject_data.shape[0], self.n_components, len(df_cols)
             ),
             np.nan
         )
@@ -66,18 +67,19 @@ class BaseRollingAnomalyDetector:
                 )
                 if train.shape[0] < (self.window_size - self.max_missing_days):
                     continue
+
                 self.model.fit(train[self.features])
                 pca_components[i, :, :] = self.model.named_steps['pca'].components_
 
                 # Training set + next day reconstructed
-                X = subject_data.iloc[i - self.window_size: i+1][self.features]
+                X = subject_data.iloc[i - self.window_size: i+1][self.features].dropna()
                 reconstruction = self.model.inverse_transform(
                     self.model.transform(X)
                 )
                 # Reconstruction error for out-of-training day kept
                 re_df.iloc[i] = ((X - reconstruction)**2).iloc[-1]
 
-        re_df['total_re'] = re_df.sum(axis=1)
+        re_df['total_re'] = re_df.sum(axis=1, min_count=1)
         return re_df, pca_components
 
     # Return if anomalous day labels
