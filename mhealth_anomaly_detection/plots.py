@@ -56,8 +56,11 @@ def lineplot_features(
             kwargs['hue'] = data[hue]
             kwargs.pop('color')
 
-        # Weird matplotlib error around datatypes here
-        #sns.lineplot(**kwargs)
+        # Weird matplotlib error around datatypes
+        try:
+            sns.lineplot(**kwargs)
+        except TypeError:
+            pass
 
         if scatter:
             sns.scatterplot(**kwargs)
@@ -74,11 +77,43 @@ def lineplot_features(
         if anomaly_col is not None:
             anomaly_days = data.loc[data[anomaly_col], 'study_day']
             ylims = ax.get_ylim()
-            ax.vlines(anomaly_days, *ylims, lw=4, color='red', alpha=.5)
+            ax.vlines(anomaly_days, *ylims, lw=2, color='red', alpha=.3)
             ax.set_ylim(*ylims)
         fa.despine_thicken_axes(ax, fontsize=20, lw=4)
     return fig, axes
 
+def overlay_reconstruction_error(
+    reconstruction_error: pd.DataFrame,
+    fig: Figure,
+    axes: Axes,
+    plot_features: List,
+    palette: Dict,
+    time_col: str = 'study_day',
+) -> None:
+    for i, f in enumerate(plot_features):
+        re_f = f+'_re'
+        if re_f not in reconstruction_error.columns:
+            continue
+
+        ax = axes[i].twinx()
+
+        if f not in palette['features']:
+            color = 'gray'
+        else:
+            color = palette['features'][f]
+        try:
+            sns.lineplot(
+                y=re_f,
+                x=time_col,
+                ax=ax,
+                color=color,
+                linestyle='dashed',
+                alpha=.5,
+                data=reconstruction_error,
+            )
+            sns.despine(ax=axes[i])
+        except TypeError:
+            continue
 
 if __name__ == '__main__':
     import mhealth_anomaly_detection.anomaly_detection as ad

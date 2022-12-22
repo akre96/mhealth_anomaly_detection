@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, Any
+from numpy.typing import ArrayLike
 from pathlib import Path
 import json
 
@@ -24,7 +25,7 @@ class BaseDailyDataSimulator:
 
     @staticmethod
     def genDailyFeature(
-        history: np.array,
+        history: ArrayLike,
         std: float,
         max: float,
         min: float = 0,
@@ -76,14 +77,14 @@ class BaseDailyDataSimulator:
         Returns:
             pd.Series: simulated EMA Sad choices response
         """
-        feature_df = subject_data[self.feature_params.keys()]
+        feature_df = subject_data[list(self.feature_params.keys())]
 
         # Set features all between 0 and 1
         norm_features = (feature_df - feature_df.min()) /\
             (feature_df.max() - feature_df.min())
 
         # Each feature weighted equally for depressed mood
-        sad_ema = norm_features[self.feature_params.keys()].sum(axis=1)
+        sad_ema = norm_features[list(self.feature_params.keys())].sum(axis=1)
 
         # daily depressed mood is a simple summation scaled between 0 and 3
         sad_ema = 3 * (
@@ -238,7 +239,7 @@ class RandomAnomalySimulator(BaseDailyDataSimulator):
                 )
                 if is_anomaly_day:
                     f_data[i] = self.genDailyFeature(
-                        history=None,
+                        history=[],
                         std=params['std'] * params['anomaly_std_scale'],
                         max=params['max'],
                         min=params['min'],

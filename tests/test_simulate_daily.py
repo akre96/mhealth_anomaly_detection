@@ -121,3 +121,40 @@ def test_base_case_several():
     assert data.study_day.nunique() == n_days
     assert 'example_feature_2' in data.columns
     assert data.shape == (n_days*n_subs, 3 + n_feat)
+
+def test_base_case_several_history():
+    n_subs = 5
+    n_days = 5
+    n_feat = 2
+    simulator = sd.RandomAnomalySimulator(
+        feature_params={
+            'example_feature': {
+                'min': 0,
+                'max': 1,
+                'mean': .5,
+                'std': 1,
+                'history_len': 3,
+                'anomaly_frequency': 7,
+                'anomaly_std_scale': 2,
+            },
+            'example_feature_2': {
+                'min': 0,
+                'max': 1,
+                'mean': .5,
+                'std': 1,
+                'history_len': 1,
+                'anomaly_frequency': 7,
+                'anomaly_std_scale': 2,
+            }
+        },
+        n_days=n_days,
+        n_subjects=n_subs,
+        sim_type='base',
+        cache_simulation=False,
+    )
+    data = simulator.simulateData()
+    print(data)
+    assert data.subject_id.nunique() == n_subs
+    assert data.study_day.nunique() == n_days
+    assert 'example_feature_2' in data.columns
+    assert data.shape == (n_days*n_subs, 3 + n_feat)

@@ -25,8 +25,8 @@ def test_input_output_base():
     print(test_data)
     re_df, pca_components = detector.getReconstructionError(test_data)
 
-    # in re_df expect 1 column + 1 column per feature
-    assert re_df.shape == (N_DAYS, N_FEATURES + 1)
+    # in re_df expect 2 column + 1 column per feature
+    assert re_df.shape == (N_DAYS, N_FEATURES + 2)
 
     # Captured pca component expected shape
     assert pca_components.shape == (
@@ -66,8 +66,8 @@ def test_input_output_base_na_value():
     print(test_data)
     re_df, pca_components = detector.getReconstructionError(test_data)
 
-    # in re_df expect 1 column + 1 column per feature
-    assert re_df.shape == (N_DAYS, N_FEATURES + 1)
+    # in re_df expect 2 column + 1 column per feature
+    assert re_df.shape == (N_DAYS, N_FEATURES + 2)
 
     # Captured pca component expected shape
     assert pca_components.shape == (

@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
-from typing import Any, Tuple
+from typing import Tuple
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import RobustScaler
 from sklearn.pipeline import Pipeline
 
 
@@ -16,7 +16,7 @@ class BaseRollingAnomalyDetector:
     ):
         self.n_components = n_components
         self.model = Pipeline([
-                    ('scaler', StandardScaler()),
+                    ('scaler', RobustScaler()),
                     ('pca', PCA(n_components=n_components, whiten=True))
                 ])
         self.window_size = window_size
@@ -73,13 +73,22 @@ class BaseRollingAnomalyDetector:
 
                 # Training set + next day reconstructed
                 X = subject_data.iloc[i - self.window_size: i+1][self.features].dropna()
-                reconstruction = self.model.inverse_transform(
+                reconstruction = pd.DataFrame(self.model.inverse_transform(
                     self.model.transform(X)
-                )
+                ), columns=self.features)
                 # Reconstruction error for out-of-training day kept
-                re_df.iloc[i] = ((X - reconstruction)**2).iloc[-1]
+                re_df.iloc[i] = (
+                    (
+                        self.model.named_steps['scaler'].transform(X) -
+                        self.model.named_steps['scaler'].transform(reconstruction)
+                    )**2
+                )[-1]
+
+        # Clip reconstruction error to 10
+        re_df[re_df > 10] = 10
 
         re_df['total_re'] = re_df.sum(axis=1, min_count=1)
+        re_df['study_day'] = subject_data['study_day']
         return re_df, pca_components
 
     # Return if anomalous day labels
@@ -96,18 +105,19 @@ if __name__ == '__main__':
 
     for sim_type, feature_params in all_feature_params.items():
         # Load data
-        simulator = sd.RandomAnomalySimulator(
-            feature_params=feature_params,
-        )
-        dataset = simulator.simulateData()
-
-        for subject, subject_data in dataset.groupby('subject_id'):
-            # Detect anomalies
-            anomalyDetector = BaseRollingAnomalyDetector(
-                features=feature_params.keys()
+        if 'Anomaly' in sim_type:
+            simulator = sd.RandomAnomalySimulator(
+                feature_params=feature_params,
             )
+            dataset = simulator.simulateData()
 
-            re, _ = anomalyDetector.getReconstructionError(subject_data)
-            re['anomaly'] = anomalyDetector.labelAnomaly(re)
-            print(re)
-            break
+            for subject, subject_data in dataset.groupby('subject_id'):
+                # Detect anomalies
+                anomalyDetector = BaseRollingAnomalyDetector(
+                    features=feature_params.keys()
+                )
+
+                re, _ = anomalyDetector.getReconstructionError(subject_data)
+                re['anomaly'] = anomalyDetector.labelAnomaly(re)
+                print(re)
+                break
