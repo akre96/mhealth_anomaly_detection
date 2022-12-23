@@ -1,4 +1,5 @@
 import numpy as np
+from numpy.typing import ArrayLike
 import pandas as pd
 from typing import Tuple
 from sklearn.decomposition import PCA
@@ -6,7 +7,71 @@ from sklearn.preprocessing import RobustScaler
 from sklearn.pipeline import Pipeline
 
 
+# TODO: Make base detector take rolling mean of window size per feature
 class BaseRollingAnomalyDetector:
+    def __init__(
+        self,
+        features: list,
+        window_size: int = 7,
+        max_missing_days: int = 2,
+    ):
+        self.window_size = window_size
+        self.max_missing_days = max_missing_days
+        self.features = features
+    
+    def getReconstructionError(
+        self,
+        subject_data: pd.DataFrame,
+    ) -> pd.DataFrame:
+        # data validation
+        if 'subject_id' not in subject_data:
+            raise ValueError('Subject data must have column subject_id')
+        if subject_data.subject_id.nunique() != 1:
+            raise ValueError('Subject data must have only one unique subject_id')
+
+        n_days = subject_data.study_day.max() - subject_data.study_day.min() + 1
+        if subject_data.shape[0] != n_days:
+            raise ValueError('Subject data must have a row for every day even if missing feature values')
+        
+        # Sort values
+        subject_data.sort_values(by='study_day', inplace=True)
+
+        # initialize columns names with features + _re
+        df_cols = [
+            '{}_re'.format(feature) for feature in self.features
+        ]
+
+        # empty df with null values to place RE in to
+        re_df = pd.DataFrame(
+            data=np.full((subject_data.shape[0], len(df_cols)), np.nan),
+            columns=df_cols,
+            index=subject_data.index
+        )
+
+        # reconstruction as rolling window_size mean
+        reconstruction = subject_data[self.features].rolling(
+            window=self.window_size,
+            min_periods=self.window_size - self.max_missing_days,
+        ).mean()
+
+        re_df[df_cols] = ((
+            subject_data[self.features] - 
+            reconstruction
+        )/reconstruction).abs()
+
+        # Clip reconstruction error to 10
+        re_df[re_df > 10] = 10
+        re_df['total_re'] = re_df.sum(axis=1, min_count=1)
+        re_df['study_day'] = subject_data['study_day']
+
+    # Return if anomalous day labels
+    def labelAnomaly(self, re_df: pd.DataFrame) -> pd.Series:
+        # anomaly as mean + 2*std of reconstruction error
+        anomaly_threshold = re_df['total_re'].mean() + 2*re_df['total_re'].std()
+        return re_df['total_re'] > anomaly_threshold
+
+
+class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
     def __init__(
         self,
         features: list,
@@ -26,7 +91,7 @@ class BaseRollingAnomalyDetector:
     def getReconstructionError(
         self,
         subject_data: pd.DataFrame,
-    ) -> Tuple[pd.DataFrame, np.ndarray]:
+    ) -> pd.DataFrame:
         # data validation
         if 'subject_id' not in subject_data:
             raise ValueError('Subject data must have column subject_id')
@@ -49,6 +114,7 @@ class BaseRollingAnomalyDetector:
         re_df = pd.DataFrame(
             data=np.full((subject_data.shape[0], len(df_cols)), np.nan),
             columns=df_cols,
+            index=subject_data.index
         )
         pca_components = np.full(
             (
@@ -78,24 +144,22 @@ class BaseRollingAnomalyDetector:
                 ), columns=self.features)
                 # Reconstruction error for out-of-training day kept
                 re_df.iloc[i] = (
-                    (
+                    np.abs(
                         self.model.named_steps['scaler'].transform(X) -
                         self.model.named_steps['scaler'].transform(reconstruction)
-                    )**2
+                    )
                 )[-1]
 
         # Clip reconstruction error to 10
         re_df[re_df > 10] = 10
 
-        re_df['total_re'] = re_df.sum(axis=1, min_count=1)
+        re_df['total_re'] = (re_df).sum(axis=1, min_count=1)
         re_df['study_day'] = subject_data['study_day']
-        return re_df, pca_components
 
-    # Return if anomalous day labels
-    def labelAnomaly(self, re_df: pd.DataFrame) -> pd.Series:
-        # anomaly as mean + 2*std of reconstruction error
-        anomaly_threshold = re_df['total_re'].mean() + 2*re_df['total_re'].std()
-        return re_df['total_re'] > anomaly_threshold
+        # Store pca components in detector class
+        self.pca_components: ArrayLike = pca_components
+
+        return re_df
 
 
 if __name__ == '__main__':
@@ -113,7 +177,7 @@ if __name__ == '__main__':
 
             for subject, subject_data in dataset.groupby('subject_id'):
                 # Detect anomalies
-                anomalyDetector = BaseRollingAnomalyDetector(
+                anomalyDetector = PCARollingAnomalyDetector(
                     features=feature_params.keys()
                 )
 

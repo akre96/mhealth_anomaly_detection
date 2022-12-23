@@ -111,8 +111,8 @@ def overlay_reconstruction_error(
                 alpha=.5,
                 data=reconstruction_error,
             )
-            sns.despine(ax=axes[i])
         except TypeError:
+            sns.despine(ax=ax)
             continue
 
 if __name__ == '__main__':
