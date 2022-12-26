@@ -120,6 +120,7 @@ if __name__ == '__main__':
     print('Plotting all subjects from cached simulations in "cache/*.csv"')
     all_feature_params = lr.get_all_feature_params()
     files = Path('cache').glob('*.csv')
+    palette = lr.get_colors()
 
     for f in files:
         # Get simulation parameters saved in file name
@@ -130,51 +131,65 @@ if __name__ == '__main__':
         file_params['sim_type'] = f.name.split('_')[0]
 
         # Initialize correct anomaly detector
-        anomalyDetector = ad.BaseRollingAnomalyDetector(
-            all_feature_params[file_params['sim_type']].keys(),
-        )
+        detectors = {
+            'base': ad.BaseRollingAnomalyDetector(all_feature_params[file_params['sim_type']].keys()),
+            'pca': ad.PCARollingAnomalyDetector(all_feature_params[file_params['sim_type']].keys()),
+            'nmf': ad.NMFRollingAnomalyDetector(all_feature_params[file_params['sim_type']].keys()),
+        }
 
-        # Create directory to save images
-        fig_dir = Path('output', 'plot_simulation', 'pca_3_ad')
-        if not fig_dir.exists():
-            fig_dir.mkdir(
-                parents=True,
-                exist_ok=True
-            )
-
-        # Load simulation data and plot each participant
-        data = pd.read_csv(f)
-        for sid, subject_data in data.groupby('subject_id'):
-            subject_data = subject_data.reset_index()
-            re, components = anomalyDetector.getReconstructionError(subject_data)
-            subject_data['anomaly'] = anomalyDetector.labelAnomaly(re)
-            subject_data['total_re'] = re['total_re']
-            fig, axes = lineplot_features(
-                subject_data,
-                [
-                    'total_re',
-                    'ema_sad_choices',
-                    *all_feature_params[file_params['sim_type']].keys(),
-                ],
-                anomaly_col='anomaly',
-            )
-            plt.suptitle(
-                sid + ' - ' + ' - '.join(
-                    [
-                        k + ': ' + v for k, v in file_params.items()
-                        if k not in ['nSubject']
-                    ]
+        for detector_name, anomalyDetector in detectors.items():
+            # Create directory to save images
+            fig_dir = Path('output', 'plot_simulation', detector_name)
+            if not fig_dir.exists():
+                fig_dir.mkdir(
+                    parents=True,
+                    exist_ok=True
                 )
-            )
-            fname = Path(
-                fig_dir,
-                sid + '_' + '_'.join(
-                    [
-                        k + '-' + v for k, v in file_params.items()
-                        if k not in ['nSubject']
-                    ]
-                ) + '.png'
 
-            )
-            print(fname)
-            fig.savefig(fname)
+            # Load simulation data and plot each participant
+            data = pd.read_csv(f)
+            for sid, subject_data in data.groupby('subject_id'):
+                subject_data = subject_data.reset_index()
+                re = anomalyDetector.getReconstructionError(subject_data)
+                subject_data['anomaly'] = anomalyDetector.labelAnomaly(re)
+                subject_data['total_re'] = re['total_re']
+                fig, axes = lineplot_features(
+                    subject_data,
+                    [
+                        'total_re',
+                        'ema_sad_choices',
+                        *all_feature_params[file_params['sim_type']].keys(),
+                    ],
+                    anomaly_col='anomaly',
+                )
+                overlay_reconstruction_error(
+                    re,
+                    fig,
+                    axes,
+                    [
+                        'total_re',
+                        'ema_sad_choices',
+                        *all_feature_params[file_params['sim_type']].keys(),
+                    ],
+                    palette=palette,
+                )
+                plt.suptitle(
+                    sid + ' - ' + ' - '.join(
+                        [
+                            k + ': ' + v for k, v in file_params.items()
+                            if k not in ['nSubject']
+                        ]
+                    )
+                )
+                fname = Path(
+                    fig_dir,
+                    sid + '_' + '_'.join(
+                        [
+                            k + '-' + v for k, v in file_params.items()
+                            if k not in ['nSubject']
+                        ]
+                    ) + '.png'
+
+                )
+                print(fname)
+                fig.savefig(fname)

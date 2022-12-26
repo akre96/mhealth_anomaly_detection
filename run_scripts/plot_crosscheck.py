@@ -13,10 +13,10 @@ if __name__ == '__main__':
     # Subjects of interest for plotting
     plot_subjects = [
         118,  # high data availability
-        109,  # Variable EMA responses
-        95,   # Variable EMA responses
-        97,   # Highly variable EMA responses
-        84,   # Drop in EMA positive score
+       # 109,  # Variable EMA responses
+       # 95,   # Variable EMA responses
+       # 97,   # Highly variable EMA responses
+       # 84,   # Drop in EMA positive score
     ]
 
     # Where to save plots
@@ -80,16 +80,16 @@ if __name__ == '__main__':
 
     # AD parameters
     ad_params = [
-        {
-            'window_size': 30,
-            'max_missing_days': 10,
-            'n_components': 7
-        },
-        {
-            'window_size': 15,
-            'max_missing_days': 3,
-            'n_components': 5
-        },
+        #{
+        #    'window_size': 30,
+        #    'max_missing_days': 10,
+        #    'n_components': 7
+        #},
+        #{
+        #    'window_size': 15,
+        #    'max_missing_days': 3,
+        #    'n_components': 5
+        #},
         {
             'window_size': 60,
             'max_missing_days': 20,
@@ -97,51 +97,57 @@ if __name__ == '__main__':
         },
     ]
 
-
     for params in ad_params:
         print('AD with parameters: ', params)
         # PCA based anomaly detection
-        detector = anomaly_detection.PCARollingAnomalyDetector(
-            features=daily_passive_features,
-            **params
-        )
-        for sid in tqdm(plot_subjects, desc='Anomaly detection plotting'):
-            # Get 1 subject of data
-            subject_data = data[data.subject_id == sid].copy()
-            if subject_data.empty:
-                print(sid, 'empty, skipping')
-                continue
-
-            # Calculate reconstruction error
-            reconstruction_error = detector.getReconstructionError(subject_data)
-            subject_data['total_re'] = reconstruction_error['total_re']
-
-            # Label anomalous days
-            subject_data['anomaly'] = detector.labelAnomaly(reconstruction_error)
-
-            # Plot
-            fig, axes = plots.lineplot_features(
-                subject_data,
-                plot_features,
-                palette=palette,
-                anomaly_col='anomaly',
-                scatter=True,
+        detectors = {
+            'pca': anomaly_detection.PCARollingAnomalyDetector(
+                features=daily_passive_features,
+                **params
+            ),
+            'nmf': anomaly_detection.NMFRollingAnomalyDetector(
+                features=daily_passive_features,
+                **params
             )
-            plots.overlay_reconstruction_error(
-                reconstruction_error=reconstruction_error,
-                fig=fig,
-                axes=axes,
-                plot_features=plot_features,
-                palette=palette
-            )
-            fig.suptitle(
-                f'Subject {sid}. PCA-AD window {params["window_size"]}, max_missing {params["max_missing_days"]}, n_components {params["n_components"]}'
-            )
+        }
+        for detector_name, detector in detectors.items():
+            for sid in tqdm(plot_subjects, desc='Anomaly detection plotting'):
+                # Get 1 subject of data
+                subject_data = data[data.subject_id == sid].copy()
+                if subject_data.empty:
+                    print(sid, 'empty, skipping')
+                    continue
 
-            # Save plot
-            fname = Path(
-                fig_dir,
-                f'{sid}_PCA-AD_components-{params["n_components"]}_window-{params["window_size"]}_maxMissing-{params["max_missing_days"]}_lineplot.png'.replace(' ', '')
-            )
-            fig.savefig(str(fname))
-            plt.close()
+                # Calculate reconstruction error
+                reconstruction_error = detector.getReconstructionError(subject_data)
+                subject_data['total_re'] = reconstruction_error['total_re']
+
+                # Label anomalous days
+                subject_data['anomaly'] = detector.labelAnomaly(reconstruction_error)
+
+                # Plot
+                fig, axes = plots.lineplot_features(
+                    subject_data,
+                    plot_features,
+                    palette=palette,
+                    anomaly_col='anomaly',
+                    scatter=True,
+                )
+                plots.overlay_reconstruction_error(
+                    reconstruction_error=reconstruction_error,
+                    fig=fig,
+                    axes=axes,
+                    plot_features=plot_features,
+                    palette=palette
+                )
+                fig.suptitle(
+                    f'Subject {sid}. {detector_name}-AD window {params["window_size"]}, max_missing {params["max_missing_days"]}, n_components {params["n_components"]}'
+                )
+
+                # Save plot
+                fname = Path(
+                    fig_dir,
+                    f'{sid}_{detector_name}-AD_components-{params["n_components"]}_window-{params["window_size"]}_maxMissing-{params["max_missing_days"]}_lineplot.png'.replace(' ', '')
+                )
+                fig.savefig(str(fname))
+                plt.close()
