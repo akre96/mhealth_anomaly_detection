@@ -1,4 +1,4 @@
-# Plot pca based anomaly detection for a select number of participants in cross check study
+# Plot pca based anomaly detection for a select number of participants in crosscheck study
 from pathlib import Path
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -6,6 +6,9 @@ from mhealth_anomaly_detection import \
     datasets, anomaly_detection, plots, load_refs
 
 if __name__ == '__main__':
+    # Parameters
+    use_cache: bool = False
+
     # Load data
     crosscheck = datasets.CrossCheck()
     data = crosscheck.data
@@ -108,10 +111,19 @@ if __name__ == '__main__':
             'nmf': anomaly_detection.NMFRollingAnomalyDetector(
                 features=daily_passive_features,
                 **params
-            )
+            ),
         }
         for detector_name, detector in detectors.items():
-            for sid in tqdm(plot_subjects, desc='Anomaly detection plotting'):
+            for sid in tqdm(plot_subjects, desc=f'{detector_name} anomaly detection plotting'):
+                # Filename for figure
+                fname = Path(
+                    fig_dir,
+                    f'{sid}_{detector_name}-AD_components-{params["n_components"]}_window-{params["window_size"]}_maxMissing-{params["max_missing_days"]}_lineplot.png'.replace(' ', '')
+                )
+                if fname.exists():
+                    if use_cache:
+                        continue
+
                 # Get 1 subject of data
                 subject_data = data[data.subject_id == sid].copy()
                 if subject_data.empty:
@@ -144,10 +156,5 @@ if __name__ == '__main__':
                     f'Subject {sid}. {detector_name}-AD window {params["window_size"]}, max_missing {params["max_missing_days"]}, n_components {params["n_components"]}'
                 )
 
-                # Save plot
-                fname = Path(
-                    fig_dir,
-                    f'{sid}_{detector_name}-AD_components-{params["n_components"]}_window-{params["window_size"]}_maxMissing-{params["max_missing_days"]}_lineplot.png'.replace(' ', '')
-                )
                 fig.savefig(str(fname))
                 plt.close()

@@ -1,5 +1,6 @@
 import numpy as np
 from numpy.typing import ArrayLike
+from typing import List
 import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import RobustScaler
@@ -7,7 +8,7 @@ from sklearn.pipeline import Pipeline
 from mhealth_anomaly_detection.onmf import Online_NMF
 
 
-# TODO: Make base detector take rolling mean of window size per feature
+# Base detector takes rolling mean of window size per feature
 class BaseRollingAnomalyDetector:
     def __init__(
         self,
@@ -18,6 +19,7 @@ class BaseRollingAnomalyDetector:
         self.window_size = window_size
         self.max_missing_days = max_missing_days
         self.features = features
+        self.name = 'RollingMean'
     
     @staticmethod
     def validateInputData(subject_data: pd.DataFrame) -> None:
@@ -39,7 +41,7 @@ class BaseRollingAnomalyDetector:
         self.validateInputData(subject_data)
         
         # Sort values
-        subject_data.sort_values(by='study_day', inplace=True)
+        subject_data = subject_data.sort_values(by='study_day')
 
         # initialize columns names with features + _re
         df_cols = [
@@ -90,6 +92,7 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                     ('scaler', RobustScaler()),
                     ('pca', PCA(n_components=n_components, whiten=True))
                 ])
+        self.name = 'PCA' + '_' + str(n_components)
         self.window_size = window_size
         self.max_missing_days = max_missing_days
         self.features = features
@@ -102,7 +105,7 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
         self.validateInputData(subject_data)
         
         # Sort values
-        subject_data.sort_values(by='study_day', inplace=True)
+        subject_data = subject_data.sort_values(by='study_day')
 
         # initialize columns names with features + _re
         df_cols = [
@@ -173,6 +176,7 @@ class NMFRollingAnomalyDetector(BaseRollingAnomalyDetector):
         self.window_size = window_size
         self.max_missing_days = max_missing_days
         self.features = features
+        self.name = 'NMF' + '_' + str(n_components)
 
     def getReconstructionError(
         self,
@@ -180,7 +184,7 @@ class NMFRollingAnomalyDetector(BaseRollingAnomalyDetector):
     ) -> pd.DataFrame:
         self.validateInputData(subject_data)
         # Sort values
-        subject_data.sort_values(by='study_day', inplace=True)
+        subject_data = subject_data.sort_values(by='study_day')
 
         # initialize columns names with features + _re
         df_cols = [
@@ -245,6 +249,62 @@ class NMFRollingAnomalyDetector(BaseRollingAnomalyDetector):
 
         return re_df
 
+
+# Find distance of induced anomaly to closest detected anomaly
+# TODO: Test this function
+def distance_real_to_detected_anomaly(
+    data: pd.DataFrame,
+    groupby_cols: List[str],
+    anomaly_detector_cols: List[str]
+) -> pd.DataFrame:
+    anomaly_detector_distances = []
+
+    for info, subject_data in data.groupby(groupby_cols):
+        # day of detected anomaly
+        anomaly_days = {
+            c: subject_data.loc[subject_data[c], 'study_day'].values
+            for c in anomaly_detector_cols
+        }
+
+        # Actual induced anomalies
+        real_anomaly = subject_data.loc[
+            subject_data['anomaly'],
+            'study_day'
+        ].values
+
+        # Initialize with NaN values 
+        anomaly_distance = {
+            c: np.full(real_anomaly.shape, np.nan)
+            for c in anomaly_detector_cols
+        }
+
+        # Calculate distance for each induced anomaly to closest future detected anomaly
+        for i in range(real_anomaly.shape[0]):
+            for c in anomaly_detector_cols:
+                distances = anomaly_days[c] - real_anomaly[i] 
+                pos_distances = distances[distances >= 0]
+
+                # If no future detected anomaly, fill distance with np.nan
+                if np.any(pos_distances):
+                    min_pos = np.min(pos_distances)
+                else:
+                    min_pos = np.nan
+                anomaly_distance[c][i] = min_pos
+
+        anomaly_distance = pd.DataFrame(anomaly_distance)
+        for i, c in enumerate(groupby_cols):
+            anomaly_distance[c] = info[i]
+        anomaly_detector_distances.append(anomaly_distance)
+
+    # for each detector's anomalies, find closest day of real anomaly on or after detected, and calculate distance
+    # If no real anomaly before detected anomaly, distance = np.nan
+    anomaly_detector_distance_df = pd.concat(anomaly_detector_distances)
+    anomaly_detector_distance_df = anomaly_detector_distance_df.melt(
+        id_vars=groupby_cols,
+        var_name='model',
+        value_name='distance'
+    )
+    return anomaly_detector_distance_df
 
 if __name__ == '__main__':
     import load_refs as lr

@@ -158,7 +158,6 @@ class BaseDailyDataSimulator:
             return pd.read_csv(out_path)
 
         else:
-            print('Simulating data...')
             # Simulate data
             for i in range(self.n_subjects):
                 subject_data = self.generateSubjectData(
@@ -226,7 +225,7 @@ class RandomAnomalySimulator(BaseDailyDataSimulator):
         for feature, params in self.feature_params.items():
             f_data = np.full((self.n_days), np.nan)
             for i in range(self.n_days):
-                if i == 0:
+                if (i == 0) or (params['history_len'] == 0):
                     history = [params['mean']]
                 else:
                     history = f_data[i-1:(i+params['history_len']-1)]
@@ -234,8 +233,7 @@ class RandomAnomalySimulator(BaseDailyDataSimulator):
                 # If anomaly day -> increase std and set around mean
                 is_anomaly_day = (
                     (params['anomaly_frequency'] > 0) and
-                    (not (i % params['anomaly_frequency'])) and
-                    (i >= params['anomaly_frequency'])
+                    (not (i % params['anomaly_frequency']))
                 )
                 if is_anomaly_day:
                     f_data[i] = self.genDailyFeature(
