@@ -6,15 +6,17 @@ Simulation induces anomalies at different frequencies (weekly, biweekly, etc.)
 and detectors are ran looking different window sizes (weekly, biweekly, etc.)
 to see how detected anomalies compare to induced anomalies.
 
-3 Anomaly Detectors, all rolling window based
+4 Anomaly Detectors, all rolling window based
 - Rolling Mean: mean value per feature over window size
 - PCA: 3 component PCA trained on window size
 - NMF: Non-negative Matrix Factorization trained on window size
+- SVM: Support vector machine, based anomaly detection
 
 Output: heatmap of correlation of frequency induced anomalies to detected
 anomalies. heatmap of average (mean/median) distance from true anomalies to 
 detected anomalies.
 """
+import time
 import pandas as pd
 import numpy as np
 from tqdm.auto import tqdm
@@ -23,10 +25,14 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from mhealth_anomaly_detection import simulate_daily
 from mhealth_anomaly_detection import anomaly_detection
+from mhealth_anomaly_detection import format_axis as fa
 
 USE_CACHE = True
+#USE_CACHE = False
 
 if __name__ == '__main__':
+    start = time.perf_counter()
+
     # Dataset parameters
     n_subjects = 100
     days_of_data = 90
@@ -69,6 +75,7 @@ if __name__ == '__main__':
                     } for feature_history in [0, 2, 7, 14, 28]
                 },
             }
+
             for param_i, (param_name, feature_params) in enumerate(feature_param_dict.items()):
                 print('\t Parameter set', param_i+1, 'of', len(feature_param_dict))
                 # Simulate data according to params above
@@ -77,9 +84,10 @@ if __name__ == '__main__':
                     n_days=days_of_data,
                     cache_simulation=False,
                     n_subjects=n_subjects,
+                    sim_type=param_name,
                 )
 
-                
+
                 # Anomaly detector window (training) size
                 window_sizes = [7, 14, 28]
                 for window_i, window_size in enumerate(window_sizes):
@@ -116,14 +124,18 @@ if __name__ == '__main__':
                             max_missing_days=0,
                             n_components=n_components
                         ),
+                        anomaly_detection.SVMRollingAnomalyDetector(
+                            features=features,
+                            window_size=window_size,
+                            max_missing_days=0,
+                            n_components=n_components
+                        )
                     ]
                     for detector in detectors:
                         data[f'{detector.name}_anomaly'] = np.nan
-                        for sid in tqdm(data.subject_id.unique(), desc=f'Running {detector.name} on each subject with {param_name}, ws: {window_size}, af: {anomaly_frequency}'):
+                        for sid in data.subject_id.unique():
                             subject_data = data.loc[data.subject_id == sid]
-                            data.loc[data.subject_id == sid, f'{detector.name}_anomaly'] = detector.labelAnomaly(
-                                detector.getReconstructionError(subject_data)
-                            )
+                            data.loc[data.subject_id == sid, f'{detector.name}_anomaly'] = detector.labelAnomaly(subject_data)
                     datasets.append(data)
         data_df = pd.concat(datasets)
         data_df.to_csv(fpath, index=False)
@@ -139,6 +151,7 @@ if __name__ == '__main__':
     
     # Results are for correlation of # anomalies detected to # induced
     results = []
+    counts = []
     for c in anomaly_detector_cols:
         # Get spearman correlation of # detected anomalies per subject/anomaly frequency
         # Separate different data generation types (history_type) and model training window size
@@ -158,8 +171,8 @@ if __name__ == '__main__':
             var_name='model',
             value_name='spearmanr'
         ).pivot_table(
-            index='window_size',
-            columns=['history_type', 'model'],
+            columns='window_size',
+            index=['history_type', 'model'],
             values='spearmanr',
         ),
         center=0,
@@ -182,41 +195,59 @@ if __name__ == '__main__':
             anomaly_detector_cols=anomaly_detector_cols,
             groupby_cols=groupby_cols
         )
-
-    # Plot median distance per condition
-    ax = sns.heatmap(
-        anomaly_detector_behavior.pivot_table(
-            values='distance',
-            columns=['window_size', 'anomaly_freq'],
-            index=['history_type', 'model'],
-            aggfunc='median',
-        ),
-        annot=True,
-        square=True,
-        vmin=0,
+    # Calculate accuracy, sensitivity, specificity
+    performance_df = anomaly_detection.performance_metrics(
+        data=data_df,
+        groupby_cols=groupby_cols,
+        anomaly_detector_cols=anomaly_detector_cols,
     )
-    fname = Path('output', 'exp01', f'distance_median_heatmap_n{n_subjects}.png')
-    plt.tight_layout()
-    plt.gcf().savefig(str(fname))
-    plt.close()
 
-    # Plot mean distance per condition
-    ax = sns.heatmap(
-        anomaly_detector_behavior.pivot_table(
-            values='distance',
-            columns=['window_size', 'anomaly_freq'],
-            index=['history_type', 'model'],
-            aggfunc='mean',
-        ),
-        annot=True,
-        square=True,
-        vmin=0,
-    )
-    fname = Path('output', 'exp01', f'distance_mean_heatmap_n{n_subjects}.png')
-    plt.tight_layout()
-    plt.gcf().savefig(str(fname))
-    plt.close()
+    # Plot performance metrics per condition
+    for metric in ['accuracy', 'sensitivity', 'specificity']:
+        fig, ax = plt.subplots(figsize=(8, 5))
+        sns.heatmap(
+            performance_df.pivot_table(
+                values=metric,
+                columns=['window_size', 'anomaly_freq'],
+                index=['history_type', 'model'],
+            ).round(2),
+            annot=True,
+            square=True,
+            vmin=0,
+            vmax=1,
+            ax=ax
+        )
+        fname = Path('output', 'exp01', f'{metric}_heatmap_n{n_subjects}.png')
+        fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
+        plt.tight_layout()
+        plt.gcf().savefig(str(fname))
+        plt.close()
+
+    # Plot mean/median distance per condition
+    for metric in ['mean', 'median']:
+        fig, ax = plt.subplots(figsize=(8, 5))
+        sns.heatmap(
+            anomaly_detector_behavior.pivot_table(
+                values='distance',
+                columns=['window_size', 'anomaly_freq'],
+                index=['history_type', 'model'],
+                aggfunc=metric,
+            ),
+            annot=True,
+            square=True,
+            vmin=0,
+            ax=ax
+        )
+        fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
+        fname = Path('output', 'exp01', f'distance_{metric}_heatmap_n{n_subjects}.png')
+        plt.tight_layout()
+        plt.gcf().savefig(str(fname))
+        plt.close()
+
     print(anomaly_detector_behavior.describe())
 
     # TODO: calculate how many induced anomalies were missed [no detected anomaly before next anomaly]
     # TODO: calculate how many detected anomalies were before the first induced
+
+    stop = time.perf_counter()
+    print(f"\nCompleted in {stop - start:0.2f} seconds")

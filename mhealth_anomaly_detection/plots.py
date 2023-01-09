@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
@@ -125,16 +126,23 @@ if __name__ == '__main__':
     for f in files:
         # Get simulation parameters saved in file name
         file_params_str = f.name.split('.')[0].split('_')
+        if f.name.startswith('exp'):
+            continue
         file_params = {
             val.split('-')[0]: val.split('-')[1] for val in file_params_str[1:]
         }
         file_params['sim_type'] = f.name.split('_')[0]
+
+        if file_params['sim_type'] not in all_feature_params.keys():
+            print('Skipping', f)
+            continue
 
         # Initialize correct anomaly detector
         detectors = {
             'base': ad.BaseRollingAnomalyDetector(all_feature_params[file_params['sim_type']].keys()),
             'pca': ad.PCARollingAnomalyDetector(all_feature_params[file_params['sim_type']].keys()),
             'nmf': ad.NMFRollingAnomalyDetector(all_feature_params[file_params['sim_type']].keys()),
+            'svm': ad.SVMRollingAnomalyDetector(all_feature_params[file_params['sim_type']].keys()),
         }
 
         for detector_name, anomalyDetector in detectors.items():
@@ -150,9 +158,12 @@ if __name__ == '__main__':
             data = pd.read_csv(f)
             for sid, subject_data in data.groupby('subject_id'):
                 subject_data = subject_data.reset_index()
-                re = anomalyDetector.getReconstructionError(subject_data)
-                subject_data['anomaly'] = anomalyDetector.labelAnomaly(re)
-                subject_data['total_re'] = re['total_re']
+                subject_data['anomaly'] = anomalyDetector.labelAnomaly(subject_data)
+                subject_data['total_re'] = np.nan
+                if not anomalyDetector.reconstruction_error.empty:
+                    re = anomalyDetector.getReconstructionError(subject_data)
+                    subject_data['total_re'] = re['total_re']
+
                 fig, axes = lineplot_features(
                     subject_data,
                     [
@@ -162,17 +173,18 @@ if __name__ == '__main__':
                     ],
                     anomaly_col='anomaly',
                 )
-                overlay_reconstruction_error(
-                    re,
-                    fig,
-                    axes,
-                    [
-                        'total_re',
-                        'ema_sad_choices',
-                        *all_feature_params[file_params['sim_type']].keys(),
-                    ],
-                    palette=palette,
-                )
+                if not anomalyDetector.reconstruction_error.empty:
+                    overlay_reconstruction_error(
+                        re,
+                        fig,
+                        axes,
+                        [
+                            'total_re',
+                            'ema_sad_choices',
+                            *all_feature_params[file_params['sim_type']].keys(),
+                        ],
+                        palette=palette,
+                    )
                 plt.suptitle(
                     sid + ' - ' + ' - '.join(
                         [

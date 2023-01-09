@@ -179,6 +179,8 @@ class BaseDailyDataSimulator:
 # TODO: Create tests showing that this works
 class RandomAnomalySimulator(BaseDailyDataSimulator):
     """ Daily data simulator which adds anomalies at a set frequency
+    Anomalies are defined as days where the feature value is not tied to historical
+    data and has a higher standard deviation
     """
     def __init__(
         self,

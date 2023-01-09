@@ -1,8 +1,9 @@
 import numpy as np
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 from typing import List
 import pandas as pd
 from sklearn.decomposition import PCA
+from sklearn.svm import OneClassSVM
 from sklearn.preprocessing import RobustScaler
 from sklearn.pipeline import Pipeline
 from mhealth_anomaly_detection.onmf import Online_NMF
@@ -19,6 +20,7 @@ class BaseRollingAnomalyDetector:
         self.window_size = window_size
         self.max_missing_days = max_missing_days
         self.features = features
+        self.reconstruction_error: pd.DataFrame = pd.DataFrame()
         self.name = 'RollingMean'
     
     @staticmethod
@@ -70,10 +72,16 @@ class BaseRollingAnomalyDetector:
         re_df[re_df > 10] = 10
         re_df['total_re'] = re_df.sum(axis=1, min_count=1)
         re_df['study_day'] = subject_data['study_day']
+        self.reconstruction_error = re_df
         return re_df
 
     # Return if anomalous day labels
-    def labelAnomaly(self, re_df: pd.DataFrame) -> pd.Series:
+    def labelAnomaly(self, subject_data: pd.DataFrame) -> pd.Series:
+        if not self.reconstruction_error.empty:
+            re_df = self.reconstruction_error
+        else:
+            re_df = self.getReconstructionError(subject_data)
+
         # anomaly as mean + 2*std of reconstruction error
         anomaly_threshold = re_df['total_re'].mean() + 2*re_df['total_re'].std()
         return re_df['total_re'] > anomaly_threshold
@@ -87,6 +95,11 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
         max_missing_days: int = 2,
         n_components: int = 3,
     ):
+        super().__init__(
+            features,
+            window_size,
+            max_missing_days
+        )
         self.n_components = n_components
         self.model = Pipeline([
                     ('scaler', RobustScaler()),
@@ -139,15 +152,20 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                 self.model.fit(train[self.features])
                 pca_components[i, :, :] = self.model.named_steps['pca'].components_
 
-                # Training set + next day reconstructed
-                X = subject_data.iloc[i - self.window_size: i+1][self.features].dropna()
+                # Training set + next day
+                X = subject_data.iloc[i - self.window_size: i+1][self.features]
+
+                # If out of training day has null values skip
+                if np.any(X.iloc[-1].isnull()):
+                    continue
+
                 reconstruction = pd.DataFrame(self.model.inverse_transform(
-                    self.model.transform(X)
+                    self.model.transform(X.dropna())
                 ), columns=self.features)
                 # Reconstruction error for out-of-training day kept
                 re_df.iloc[i] = (
                     np.abs(
-                        self.model.named_steps['scaler'].transform(X) -
+                        self.model.named_steps['scaler'].transform(X.dropna()) -
                         self.model.named_steps['scaler'].transform(reconstruction)
                     )
                 )[-1]
@@ -160,10 +178,66 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
 
         # Store pca components in detector class
         self.components: ArrayLike = pca_components
+        self.reconstruction_error = re_df
 
         return re_df
 
+class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
+    def __init__(
+        self,
+        features: list,
+        window_size: int = 7,
+        max_missing_days: int = 2,
+        n_components: int = 3,
+        kernel: str = 'rbf'
+    ):
+        super().__init__(
+            features,
+            window_size,
+            max_missing_days
+        )
+        self.n_components = n_components
+        self.model = Pipeline([
+                    ('scaler', RobustScaler()),
+                    ('svm', OneClassSVM(degree=n_components, kernel=kernel))
+                ])
+        self.name = 'svm' + '_' + str(n_components)
+        self.window_size = window_size
+        self.max_missing_days = max_missing_days
+        self.features = features
+    
+    def labelAnomaly(self, subject_data: pd.DataFrame) -> NDArray:
+        anomaly_labels = np.full(subject_data.shape[0], 0)
 
+        # Predict if last day of window anomalous
+        for i in range(subject_data.shape[0]):
+            # RE only calculated with sufficient historical data
+            if i > (self.window_size):
+                # Train on window_size days
+                train = subject_data.iloc[i - self.window_size:i].dropna(
+                    subset=self.features
+                )
+                if train.shape[0] < (self.window_size - self.max_missing_days):
+                    continue
+
+                self.model.fit(train[self.features])
+
+                # Training set + next day
+                X = subject_data.iloc[i - self.window_size: i+1][self.features]
+
+                # If out of training day has null values skip
+                if np.any(X.iloc[-1].isnull()):
+                    continue
+                 
+                anomaly_labels[i] = self.model.predict(X.dropna())[-1]
+        anomaly_labels[anomaly_labels == -1.0] = 0
+        anomaly_labels[np.isnan(anomaly_labels)] = 0
+        return anomaly_labels == 1
+        
+    
+
+
+# TODO: Refactor with SK-learn implementation
 class NMFRollingAnomalyDetector(BaseRollingAnomalyDetector):
     def __init__(
         self,
@@ -172,6 +246,11 @@ class NMFRollingAnomalyDetector(BaseRollingAnomalyDetector):
         max_missing_days: int = 2,
         n_components: int = 3,
     ):
+        super().__init__(
+            features,
+            window_size,
+            max_missing_days
+        )
         self.n_components = n_components
         self.window_size = window_size
         self.max_missing_days = max_missing_days
@@ -246,9 +325,47 @@ class NMFRollingAnomalyDetector(BaseRollingAnomalyDetector):
 
         # Store pca components in detector class
         self.components: ArrayLike = nmf_components
+        self.reconstruction_error = re_df
 
         return re_df
 
+# Calculate accuracy, sensitivity and specificity
+def performance_metrics(
+    data: pd.DataFrame,
+    anomaly_detector_cols: List[str],
+    groupby_cols: List[str] = ['subject_id', 'history_type', 'window_size', 'anomaly_freq'],
+) -> pd.DataFrame:
+    models = [c.split('_anomaly')[0] for c in anomaly_detector_cols]
+    performance_dict = {
+        c: [] for c in groupby_cols 
+    }
+    performance_dict['model'] = []
+    performance_dict['true_positives'] = []
+    performance_dict['true_negatives'] = []
+    performance_dict['false_positives'] = []
+    performance_dict['false_negatives'] = []
+
+    for info, subject_data in data.groupby(groupby_cols):
+        # Fix error if only one groupby item, info is a string, not a tuple[str]
+        if type(info) == str:
+            info = [info]
+        for model in models:
+            for i, val in enumerate(info):
+                performance_dict[groupby_cols[i]].append(val)
+            performance_dict['model'].append(model)
+            performance_dict['true_positives'].append((subject_data['anomaly'] & subject_data[model+'_anomaly']).sum())
+            performance_dict['true_negatives'].append((~subject_data['anomaly'] & ~subject_data[model+'_anomaly']).sum())
+            performance_dict['false_negatives'].append((subject_data['anomaly'] & ~subject_data[model+'_anomaly']).sum())
+            performance_dict['false_positives'].append((~subject_data['anomaly'] & subject_data[model+'_anomaly']).sum())
+
+    performance_df = pd.DataFrame(performance_dict)
+    performance_df['sensitivity'] = performance_df['true_positives'] \
+        / (performance_df['true_positives'] + performance_df['false_negatives'])
+    performance_df['specificity'] = performance_df['true_negatives'] \
+        / (performance_df['true_negatives'] + performance_df['false_positives']) 
+    performance_df['accuracy'] = performance_df[['true_positives', 'true_negatives']].sum(axis=1) \
+        / performance_df[['true_positives', 'true_negatives', 'false_positives', 'false_negatives']].sum(axis=1)
+    return performance_df
 
 # Find distance of induced anomaly to closest detected anomaly
 # TODO: Test this function
@@ -259,11 +376,12 @@ def distance_real_to_detected_anomaly(
 ) -> pd.DataFrame:
     anomaly_detector_distances = []
 
+    models = [c.split('_anomaly')[0] for c in anomaly_detector_cols]
     for info, subject_data in data.groupby(groupby_cols):
         # day of detected anomaly
         anomaly_days = {
-            c: subject_data.loc[subject_data[c], 'study_day'].values
-            for c in anomaly_detector_cols
+            c: subject_data.loc[subject_data[c + '_anomaly'], 'study_day'].values
+            for c in models 
         }
 
         # Actual induced anomalies
@@ -275,12 +393,12 @@ def distance_real_to_detected_anomaly(
         # Initialize with NaN values 
         anomaly_distance = {
             c: np.full(real_anomaly.shape, np.nan)
-            for c in anomaly_detector_cols
+            for c in models 
         }
 
         # Calculate distance for each induced anomaly to closest future detected anomaly
         for i in range(real_anomaly.shape[0]):
-            for c in anomaly_detector_cols:
+            for c in models:
                 distances = anomaly_days[c] - real_anomaly[i] 
                 pos_distances = distances[distances >= 0]
 

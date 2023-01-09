@@ -23,17 +23,11 @@ def test_input_output_base():
         window_size=3,
     )
     print(test_data)
-    re_df, pca_components = detector.getReconstructionError(test_data)
+    re_df = detector.getReconstructionError(test_data)
 
     # in re_df expect 2 column + 1 column per feature
     assert re_df.shape == (N_DAYS, N_FEATURES + 2)
 
-    # Captured pca component expected shape
-    assert pca_components.shape == (
-        N_DAYS,
-        detector.model.named_steps['pca'].n_components_,
-        N_FEATURES
-    )
 
 # Input data cannot be missing full row for a day
 def test_input_output_base_missing_day():
@@ -52,26 +46,38 @@ def test_input_output_base_missing_day():
 
     assert error
 
-def test_input_output_base_na_value():
+def test_input_output_pc_methods_na_value():
     # drop a day of data
     test_data = TEST_DATA.copy()
 
     # Set 1 value to NaN
     test_data[list(FEATURES.keys())[1]].iloc[2] = np.nan
-    detector = ad.BaseRollingAnomalyDetector(
-        features=list(FEATURES.keys()),
-        window_size=3,
-        max_missing_days=0
-    )
-    print(test_data)
-    re_df, pca_components = detector.getReconstructionError(test_data)
+    detectors = [
+        ad.PCARollingAnomalyDetector(
+            features=list(FEATURES.keys()),
+            window_size=3,
+            max_missing_days=0,
+            n_components=3,
+        ),
+        ad.NMFRollingAnomalyDetector(
+            features=list(FEATURES.keys()),
+            window_size=3,
+            max_missing_days=0,
+            n_components=3,
+        )
+    ]
 
-    # in re_df expect 2 column + 1 column per feature
-    assert re_df.shape == (N_DAYS, N_FEATURES + 2)
+    for detector in detectors:
+        re_df = detector.getReconstructionError(test_data)
+        components = detector.components
 
-    # Captured pca component expected shape
-    assert pca_components.shape == (
-        N_DAYS,
-        detector.model.named_steps['pca'].n_components_,
-        N_FEATURES
-    )
+        # in re_df expect 2 column + 1 column per feature
+        assert re_df.shape == (N_DAYS, N_FEATURES + 2)
+
+        # Captured pca component expected shape
+        assert components.shape == (
+            N_DAYS,
+            detector.n_components,
+            N_FEATURES
+        )
+

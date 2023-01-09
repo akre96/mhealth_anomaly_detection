@@ -1,6 +1,7 @@
 # Plot pca based anomaly detection for a select number of participants in crosscheck study
 from pathlib import Path
 from tqdm import tqdm
+import numpy as np
 import matplotlib.pyplot as plt
 from mhealth_anomaly_detection import \
     datasets, anomaly_detection, plots, load_refs
@@ -83,16 +84,16 @@ if __name__ == '__main__':
 
     # AD parameters
     ad_params = [
-        #{
-        #    'window_size': 30,
-        #    'max_missing_days': 10,
-        #    'n_components': 7
-        #},
-        #{
-        #    'window_size': 15,
-        #    'max_missing_days': 3,
-        #    'n_components': 5
-        #},
+        {
+            'window_size': 30,
+            'max_missing_days': 10,
+            'n_components': 7
+        },
+        {
+            'window_size': 15,
+            'max_missing_days': 3,
+            'n_components': 5
+        },
         {
             'window_size': 60,
             'max_missing_days': 20,
@@ -109,6 +110,10 @@ if __name__ == '__main__':
                 **params
             ),
             'nmf': anomaly_detection.NMFRollingAnomalyDetector(
+                features=daily_passive_features,
+                **params
+            ),
+            'svm': anomaly_detection.SVMRollingAnomalyDetector(
                 features=daily_passive_features,
                 **params
             ),
@@ -130,12 +135,10 @@ if __name__ == '__main__':
                     print(sid, 'empty, skipping')
                     continue
 
-                # Calculate reconstruction error
-                reconstruction_error = detector.getReconstructionError(subject_data)
-                subject_data['total_re'] = reconstruction_error['total_re']
 
                 # Label anomalous days
-                subject_data['anomaly'] = detector.labelAnomaly(reconstruction_error)
+                subject_data['anomaly'] = detector.labelAnomaly(subject_data)
+                subject_data['total_re'] = np.nan
 
                 # Plot
                 fig, axes = plots.lineplot_features(
@@ -145,13 +148,19 @@ if __name__ == '__main__':
                     anomaly_col='anomaly',
                     scatter=True,
                 )
-                plots.overlay_reconstruction_error(
-                    reconstruction_error=reconstruction_error,
-                    fig=fig,
-                    axes=axes,
-                    plot_features=plot_features,
-                    palette=palette
-                )
+
+                if not detector.reconstruction_error.empty:
+                    # Calculate reconstruction error
+                    reconstruction_error = detector.getReconstructionError(subject_data)
+                    subject_data['total_re'] = reconstruction_error['total_re']
+
+                    plots.overlay_reconstruction_error(
+                        reconstruction_error=reconstruction_error,
+                        fig=fig,
+                        axes=axes,
+                        plot_features=plot_features,
+                        palette=palette
+                    )
                 fig.suptitle(
                     f'Subject {sid}. {detector_name}-AD window {params["window_size"]}, max_missing {params["max_missing_days"]}, n_components {params["n_components"]}'
                 )
