@@ -227,7 +227,14 @@ class RandomAnomalySimulator(BaseDailyDataSimulator):
         for feature, params in self.feature_params.items():
             f_data = np.full((self.n_days), np.nan)
             for i in range(self.n_days):
-                if (i == 0) or (params['history_len'] == 0):
+                if (i == 0):
+                    # Random starting point
+                    history = [
+                        (params['max'] - params['min'])
+                        * np.random.random()
+                        + params['min']
+                    ]
+                elif params['history_len'] == 0:
                     history = [params['mean']]
                 else:
                     history = f_data[i-1:(i+params['history_len']-1)]

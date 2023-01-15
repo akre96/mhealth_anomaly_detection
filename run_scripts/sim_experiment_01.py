@@ -28,15 +28,18 @@ from mhealth_anomaly_detection import anomaly_detection
 from mhealth_anomaly_detection import format_axis as fa
 
 USE_CACHE = True
-#USE_CACHE = False
 
 if __name__ == '__main__':
     start = time.perf_counter()
 
+    # DATA SIMULATION
+    print('Generating simulated data...')
+
     # Dataset parameters
     n_subjects = 100
     days_of_data = 90
-    frequencies = [7, 14, 28]
+    frequencies = [2, 7, 14, 28]
+    window_sizes = [7, 14, 28] # Can likely reduce to 2
     n_features = 5
 
     # File name for the simulated dataset with anomaly detection run
@@ -45,12 +48,12 @@ if __name__ == '__main__':
 
     # If data is cached, do not run anomaly detection only results generation
     if USE_CACHE and fpath.exists():
-        print('Using cached data from: ', fpath)
+        print('\tUsing cached data from: ', fpath)
         data_df = pd.read_csv(fpath)
     else:
         datasets = []
         for anomaly_frequency in frequencies:
-            print('Anomaly frequency: ', anomaly_frequency, 'of', frequencies)
+            print('\tAnomaly frequency: ', anomaly_frequency, 'of', frequencies)
             feature_param_dict = {
                 'history_all_28': {
                     f'history-{28}_anomalyFrequency-{anomaly_frequency}_{i}': {
@@ -77,7 +80,7 @@ if __name__ == '__main__':
             }
 
             for param_i, (param_name, feature_params) in enumerate(feature_param_dict.items()):
-                print('\t Parameter set', param_i+1, 'of', len(feature_param_dict))
+                print('\t\t Parameter set', param_i+1, 'of', len(feature_param_dict))
                 # Simulate data according to params above
                 simulator = simulate_daily.RandomAnomalySimulator(
                     feature_params=feature_params,
@@ -89,9 +92,8 @@ if __name__ == '__main__':
 
 
                 # Anomaly detector window (training) size
-                window_sizes = [7, 14, 28]
                 for window_i, window_size in enumerate(window_sizes):
-                    print('\t\t Window size', window_i+1, 'of', len(window_sizes))
+                    print('\t\t\t Window size', window_i+1, 'of', len(window_sizes))
 
                     # Simulate Data
                     data = simulator.simulateData(use_cache=False)
@@ -141,33 +143,46 @@ if __name__ == '__main__':
         data_df.to_csv(fpath, index=False)
 
     anomaly_detector_cols = [d for d in data_df.columns if d.endswith("_anomaly")]
+    groupby_cols = ['subject_id', 'anomaly_freq', 'history_type', 'window_size']
 
-    # Anomalies detected per subject/model
-    detected_anomalies = data_df.groupby(
-        ['subject_id', 'history_type', 'anomaly_freq', 'window_size']
-    )[['anomaly'] + anomaly_detector_cols].sum(numeric_only=False)
+    # PERFORMANCE CALCULATIONS
+    print('Calculating Metrics...')
 
-    split_by = ['history_type', 'window_size']
-    
-    # Results are for correlation of # anomalies detected to # induced
-    results = []
-    counts = []
-    for c in anomaly_detector_cols:
-        # Get spearman correlation of # detected anomalies per subject/anomaly frequency
-        # Separate different data generation types (history_type) and model training window size
-        res = detected_anomalies.reset_index()\
-            .groupby(split_by)[['anomaly', c]]\
-            .corr(method='spearman').reset_index()
-        res = res[res[f'level_{len(split_by)}'] == 'anomaly'][split_by + [c]]\
-            .rename(columns={c:c.split('_anomaly')[0]})\
-            .set_index(split_by)
-        results.append(res)
-    results_df = pd.concat(results, axis=1).reset_index()
+    # Calculate correlation of # anomalies model detects to # induced
+    print('\tSpearman R - detected vs induced anomalies')
+    correlation_df = anomaly_detection\
+        .correlate_detected_to_induced(
+            data=data_df,
+            anomaly_detector_cols=anomaly_detector_cols,
+            groupby_cols=groupby_cols,
+            corr_across=['history_type', 'window_size'],
+        )
+
+
+    # Calculate # of day difference between anomaly induced and closest detected anomaly
+    print('\tDistance of anomalies to detected anomaly')
+    anomaly_detector_behavior = anomaly_detection\
+        .distance_real_to_detected_anomaly(
+            data=data_df,
+            anomaly_detector_cols=anomaly_detector_cols,
+            groupby_cols=groupby_cols
+        )
+    # Calculate accuracy, sensitivity, specificity
+    print('\tAccuracy, sensitivity, specificity')
+    performance_df = anomaly_detection.performance_metrics(
+        data=data_df,
+        groupby_cols=groupby_cols,
+        anomaly_detector_cols=anomaly_detector_cols,
+    )
+
+    # PLOTTING
+    print('Plotting...')
 
     # Plot correlation of # detected anomalies per subject/anomaly frequency
-    ax = sns.heatmap(
-        results_df.melt(
-            id_vars=split_by,
+    fig, ax = plt.subplots(figsize=(8, 5))
+    sns.heatmap(
+        correlation_df.melt(
+            id_vars=['history_type', 'window_size'],
             var_name='model',
             value_name='spearmanr'
         ).pivot_table(
@@ -180,27 +195,14 @@ if __name__ == '__main__':
         vmax=1,
         square=True,
         annot=True,
-        cmap='coolwarm'
+        cmap='coolwarm',
+        ax=ax
     )
     fname = Path('output', 'exp01', f'spearmanr_heatmap_n{n_subjects}.png')
+    fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
     plt.tight_layout()
     plt.gcf().savefig(str(fname))
     plt.close()
-
-    # Calculate # of day difference between anomaly induced and closest detected anomaly
-    groupby_cols = ['subject_id', 'anomaly_freq'] + split_by
-    anomaly_detector_behavior = anomaly_detection\
-        .distance_real_to_detected_anomaly(
-            data=data_df,
-            anomaly_detector_cols=anomaly_detector_cols,
-            groupby_cols=groupby_cols
-        )
-    # Calculate accuracy, sensitivity, specificity
-    performance_df = anomaly_detection.performance_metrics(
-        data=data_df,
-        groupby_cols=groupby_cols,
-        anomaly_detector_cols=anomaly_detector_cols,
-    )
 
     # Plot performance metrics per condition
     for metric in ['accuracy', 'sensitivity', 'specificity']:
@@ -244,7 +246,7 @@ if __name__ == '__main__':
         plt.gcf().savefig(str(fname))
         plt.close()
 
-    print(anomaly_detector_behavior.describe())
+    print(performance_df.groupby('model').accuracy.describe().round(2))
 
     # TODO: calculate how many induced anomalies were missed [no detected anomaly before next anomaly]
     # TODO: calculate how many detected anomalies were before the first induced

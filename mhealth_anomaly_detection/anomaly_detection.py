@@ -329,6 +329,42 @@ class NMFRollingAnomalyDetector(BaseRollingAnomalyDetector):
 
         return re_df
 
+# Correlation between # detected and induced anomalies
+def correlate_detected_to_induced(
+    data: pd.DataFrame,
+    anomaly_detector_cols: List[str],
+    groupby_cols: List[str],
+    corr_across: List[str]
+) -> pd.DataFrame:
+    for c in corr_across:
+        if c not in groupby_cols:
+            raise ValueError(f'All vars in corr_across must by in groupby_cols, {c} not found')
+
+    # Ensure bool
+    for c in ['anomaly', *anomaly_detector_cols]:
+        data[c] = data[c].astype(bool)
+
+    # Anomalies detected per subject/model
+    detected_anomalies = data.groupby(groupby_cols)[
+        ['anomaly'] + anomaly_detector_cols
+    ].sum(numeric_only=False)
+
+    
+    # Results are for correlation of # anomalies detected to # induced
+    results = []
+    for c in anomaly_detector_cols:
+        # Get spearman correlation of # detected anomalies per subject/anomaly frequency
+        # Separate different data generation types (history_type) and model training window size
+        res = detected_anomalies.reset_index()\
+            .groupby(corr_across)[['anomaly', c]]\
+            .corr(method='spearman').reset_index()
+        res = res[res[f'level_{len(corr_across)}'] == 'anomaly'][corr_across + [c]]\
+            .rename(columns={c:c.split('_anomaly')[0]})\
+            .set_index(corr_across)
+        results.append(res)
+    correlation_df = pd.concat(results, axis=1).reset_index()
+    return correlation_df
+
 # Calculate accuracy, sensitivity and specificity
 def performance_metrics(
     data: pd.DataFrame,
@@ -346,10 +382,12 @@ def performance_metrics(
     performance_dict['false_negatives'] = []
 
     for info, subject_data in data.groupby(groupby_cols):
+        subject_data['anomaly'] = subject_data['anomaly'].astype(bool)
         # Fix error if only one groupby item, info is a string, not a tuple[str]
         if type(info) == str:
             info = [info]
         for model in models:
+            subject_data[model+'_anomaly'] = subject_data[model+'_anomaly'].astype(bool)
             for i, val in enumerate(info):
                 performance_dict[groupby_cols[i]].append(val)
             performance_dict['model'].append(model)
@@ -367,8 +405,8 @@ def performance_metrics(
         / performance_df[['true_positives', 'true_negatives', 'false_positives', 'false_negatives']].sum(axis=1)
     return performance_df
 
+
 # Find distance of induced anomaly to closest detected anomaly
-# TODO: Test this function
 def distance_real_to_detected_anomaly(
     data: pd.DataFrame,
     groupby_cols: List[str],
@@ -378,6 +416,9 @@ def distance_real_to_detected_anomaly(
 
     models = [c.split('_anomaly')[0] for c in anomaly_detector_cols]
     for info, subject_data in data.groupby(groupby_cols):
+        for model in models:
+            subject_data[model + '_anomaly'] = subject_data[model + '_anomaly'].astype(bool)
+        subject_data['anomaly'] = subject_data['anomaly'].astype(bool)
         # day of detected anomaly
         anomaly_days = {
             c: subject_data.loc[subject_data[c + '_anomaly'], 'study_day'].values
@@ -395,7 +436,6 @@ def distance_real_to_detected_anomaly(
             c: np.full(real_anomaly.shape, np.nan)
             for c in models 
         }
-
         # Calculate distance for each induced anomaly to closest future detected anomaly
         for i in range(real_anomaly.shape[0]):
             for c in models:
@@ -403,13 +443,14 @@ def distance_real_to_detected_anomaly(
                 pos_distances = distances[distances >= 0]
 
                 # If no future detected anomaly, fill distance with np.nan
-                if np.any(pos_distances):
+                if np.any(pos_distances >= 0):
                     min_pos = np.min(pos_distances)
                 else:
                     min_pos = np.nan
                 anomaly_distance[c][i] = min_pos
 
         anomaly_distance = pd.DataFrame(anomaly_distance)
+        anomaly_distance['study_day'] = real_anomaly
         for i, c in enumerate(groupby_cols):
             anomaly_distance[c] = info[i]
         anomaly_detector_distances.append(anomaly_distance)
@@ -418,7 +459,7 @@ def distance_real_to_detected_anomaly(
     # If no real anomaly before detected anomaly, distance = np.nan
     anomaly_detector_distance_df = pd.concat(anomaly_detector_distances)
     anomaly_detector_distance_df = anomaly_detector_distance_df.melt(
-        id_vars=groupby_cols,
+        id_vars=['study_day', *groupby_cols],
         var_name='model',
         value_name='distance'
     )
