@@ -27,7 +27,7 @@ from mhealth_anomaly_detection import simulate_daily
 from mhealth_anomaly_detection import anomaly_detection
 from mhealth_anomaly_detection import format_axis as fa
 
-USE_CACHE = True
+USE_CACHE = False
 
 if __name__ == '__main__':
     start = time.perf_counter()
@@ -210,7 +210,7 @@ if __name__ == '__main__':
         sns.heatmap(
             performance_df.pivot_table(
                 values=metric,
-                columns=['window_size', 'anomaly_freq'],
+                columns=['anomaly_freq', 'window_size'],
                 index=['history_type', 'model'],
             ).round(2),
             annot=True,
@@ -231,7 +231,7 @@ if __name__ == '__main__':
         sns.heatmap(
             anomaly_detector_behavior.pivot_table(
                 values='distance',
-                columns=['window_size', 'anomaly_freq'],
+                columns=['anomaly_freq', 'window_size'],
                 index=['history_type', 'model'],
                 aggfunc=metric,
             ),
