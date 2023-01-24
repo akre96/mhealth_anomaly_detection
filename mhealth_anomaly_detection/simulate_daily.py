@@ -229,11 +229,12 @@ class RandomAnomalySimulator(BaseDailyDataSimulator):
             for i in range(self.n_days):
                 if (i == 0):
                     # Random starting point
-                    history = [
+                    f_data[i]= [
                         (params['max'] - params['min'])
                         * np.random.random()
                         + params['min']
                     ]
+                    continue
                 elif params['history_len'] == 0:
                     history = [params['mean']]
                 else:
@@ -245,13 +246,9 @@ class RandomAnomalySimulator(BaseDailyDataSimulator):
                     (not (i % params['anomaly_frequency']))
                 )
                 if is_anomaly_day:
-                    f_data[i] = self.genDailyFeature(
-                        history=[],
-                        std=params['std'] * params['anomaly_std_scale'],
-                        max=params['max'],
-                        min=params['min'],
-                        init_value=params['mean'],
-                    )
+                    f_data[i] = (params['max'] - params['min'])\
+                        * np.random.random()\
+                        + params['min']
                 else:
                     f_data[i] = self.genDailyFeature(
                         history=history,
