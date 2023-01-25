@@ -30,11 +30,6 @@ FREQUENCIES = [2, 7, 14, 28]
 WINDOW_SIZES = [7, 14, 28] # Can likely reduce to 2
 N_FEATURES_LIST = [5, 10, 25, 100]
 
-# Test it run
-FREQUENCIES = [14, 28]
-WINDOW_SIZES = [14, 28] # Can likely reduce to 2
-N_FEATURES_LIST = [5, 10]
-
 def run_ad_on_simulated(
     feature_params: Dict,
     param_name: str,
