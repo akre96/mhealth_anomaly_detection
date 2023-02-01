@@ -22,6 +22,51 @@ class BaseDailyDataSimulator:
         self.n_subjects = n_subjects
         self.sim_type = sim_type
         self.cache_simulation = cache_simulation
+        self.added_features = []
+
+    # TODO: Test that this works
+    def addCorrelatedFeatures(
+        self,
+        data: pd.DataFrame,
+        n_feats: int,
+        noise_scale: float = 0.1,
+    ) -> pd.DataFrame:
+        """Create features correlated to existing features
+
+        Args:
+            data (pd.DataFrame): Generated dataset
+            n_feats (int): # of additional features per existing one
+            noise_scale (float, optional): scale of noise relative to feature mean. Defaults to 0.1.
+
+        Returns:
+            pd.DataFrame: data with n_feats * len(feature_params) additional features
+        """
+        data_added = data.copy()
+        for feature, params in self.feature_params.items():
+            for i in range(n_feats):
+                f_name = f'{feature}_corr_{i}'
+                f_noise = np.random.normal(
+                    0,
+                    params['mean']*noise_scale,
+                    data.shape[0]
+                )
+                data_added[f_name] = data[feature] + f_noise
+                self.added_features.append(f_name)
+        return data_added
+
+    def addReLuFeatures(
+        self,
+        data: pd.DataFrame,
+        n_feats: int,
+    ) -> pd.DataFrame:
+        data_added = data.copy()
+        for feature, params in self.feature_params.items():
+            for i in range(n_feats):
+                f_name = f'{feature}_relu_{i}'
+                data_added[f_name] = data[feature] * (data[feature] > params['mean'])
+                self.added_features.append(f_name)
+        return data_added
+
 
     @staticmethod
     def genDailyFeature(
@@ -256,6 +301,7 @@ class RandomAnomalySimulator(BaseDailyDataSimulator):
                     )
             data_dict[feature] = f_data
         return pd.DataFrame(data_dict)
+
 
 
 if __name__ == '__main__':

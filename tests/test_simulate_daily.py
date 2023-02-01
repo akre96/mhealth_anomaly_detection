@@ -158,3 +158,33 @@ def test_base_case_several_history():
     assert data.study_day.nunique() == n_days
     assert 'example_feature_2' in data.columns
     assert data.shape == (n_days*n_subs, 3 + n_feat)
+
+def test_correlate_features_single():
+    simulator = sd.BaseDailyDataSimulator(
+        feature_params={
+            'example_feature': {
+                'min': 0,
+                'max': 1,
+                'mean': .5,
+                'std': 1,
+                'history_len': 1,
+            }
+        },
+        n_days=1,
+        n_subjects=1,
+        sim_type='base',
+        cache_simulation=False,
+    )
+    data = simulator.simulateData()
+    with_corr = simulator.addCorrelatedFeatures(
+        data,
+        n_feats=1,
+        noise_scale=.1
+    )
+    print(data)
+    print(with_corr)
+    assert with_corr.subject_id.nunique() == 1
+    assert with_corr.study_day.nunique() == 1
+    assert 'example_feature_corr_0' in with_corr.columns
+    assert data.shape == (1, 4)
+    assert with_corr.shape == (1, 5)

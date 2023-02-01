@@ -7,7 +7,11 @@
         "Baseline": "#1A1A1A",
         "Logistic Regression": "#718093",
         "Random Forest Classifier": "#192a56",
-        "Gradient Boosting Classifier": "#487eb0"
+        "Gradient Boosting Classifier": "#487eb0",
+        "PCA": "#44AA99",
+        "NMF": "#117733",
+        "SVM": "#EE99AA",
+        "RollingMean": "#88CCEE"
     },
     "features": {
         "active_energy_burned": "#228833", 

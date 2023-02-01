@@ -2,6 +2,7 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from typing import List
 import pandas as pd
+from tqdm.auto import tqdm
 from sklearn.decomposition import PCA
 from sklearn.svm import OneClassSVM
 from sklearn.preprocessing import RobustScaler
@@ -201,7 +202,7 @@ class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
                     ('scaler', RobustScaler()),
                     ('svm', OneClassSVM(degree=n_components, kernel=kernel))
                 ])
-        self.name = 'svm' + '_' + str(n_components)
+        self.name = 'SVM' + '_' + str(n_components)
         self.window_size = window_size
         self.max_missing_days = max_missing_days
         self.features = features
@@ -381,7 +382,7 @@ def performance_metrics(
     performance_dict['false_positives'] = []
     performance_dict['false_negatives'] = []
 
-    for info, subject_data in data.groupby(groupby_cols):
+    for info, subject_data in tqdm(data.groupby(groupby_cols)):
         subject_data['anomaly'] = subject_data['anomaly'].astype(bool)
         # Fix error if only one groupby item, info is a string, not a tuple[str]
         if type(info) == str:
@@ -415,7 +416,7 @@ def distance_real_to_detected_anomaly(
     anomaly_detector_distances = []
 
     models = [c.split('_anomaly')[0] for c in anomaly_detector_cols]
-    for info, subject_data in data.groupby(groupby_cols):
+    for info, subject_data in tqdm(data.groupby(groupby_cols)):
         for model in models:
             subject_data[model + '_anomaly'] = subject_data[model + '_anomaly'].astype(bool)
         subject_data['anomaly'] = subject_data['anomaly'].astype(bool)

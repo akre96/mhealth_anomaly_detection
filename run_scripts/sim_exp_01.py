@@ -1,15 +1,25 @@
-
-"""_summary_ Experiment 02: Extension of exp01, now comparing how number of features affects performance
+"""_summary_ Experiment 01: How do 3 simple rolling window based anomaly
+detectors function on a 5 feature simulated dataset.
 _author_ Samir Akre <sakre@g.ucla.edu>
 
+Simulation induces anomalies at different frequencies (weekly, biweekly, etc.)
+and detectors are ran looking different window sizes (weekly, biweekly, etc.)
+to see how detected anomalies compare to induced anomalies.
+
+4 Anomaly Detectors, all rolling window based
+- Rolling Mean: mean value per feature over window size
+- PCA: 3 component PCA trained on window size
+- NMF: Non-negative Matrix Factorization trained on window size
+- SVM: Support vector machine, based anomaly detection
 
 Output: heatmap of correlation of frequency induced anomalies to detected
-anomalies. heatmap of average (mean/median) distance from true anomalies to
-detected anomalies. Heatmap of sensitivity/specificity/accuracy of models at
-predicting anomalous days
+anomalies. heatmap of average (mean/median) distance from true anomalies to 
+detected anomalies.
 """
+
 import time
 import pandas as pd
+from tqdm.auto import tqdm
 import numpy as np
 from p_tqdm import p_map
 from pathlib import Path
@@ -20,23 +30,23 @@ from mhealth_anomaly_detection import simulate_daily
 from mhealth_anomaly_detection import anomaly_detection
 from mhealth_anomaly_detection import format_axis as fa
 
-EXPERIMENT = 'exp02'
+EXPERIMENT = 'exp01'
 USE_CACHE = True
+PARALLEL = True
 
 # Dataset parameters
 N_SUBJECTS = 100
 DAYS_OF_DATA = 90
 FREQUENCIES = [2, 7, 14, 28]
 WINDOW_SIZES = [7, 14, 28] # Can likely reduce to 2
-N_FEATURES_LIST = [5, 10, 25, 100]
-KEY_DIFFERENCE = 'n_features'
+N_FEATURES = 5
+KEY_DIFFERENCE = 'history_type'
 
 def run_ad_on_simulated(
     feature_params: Dict,
     param_name: str,
     anomaly_frequency: int,
     window_size: int,
-    n_features: int,
 ) -> pd.DataFrame:
 
     # Simulate data according to params above
@@ -48,6 +58,7 @@ def run_ad_on_simulated(
         sim_type=param_name,
     )
 
+    n_features = N_FEATURES
     # Simulate Data
     data = simulator.simulateData(use_cache=False)
     data['anomaly_freq'] = anomaly_frequency
@@ -61,7 +72,9 @@ def run_ad_on_simulated(
 
     # Run Anomaly Detection
     n_components = 5
-    features = list(feature_params.keys())
+    features = [*list(feature_params.keys()), *simulator.added_features]
+    if len(features) != n_features:
+        raise ValueError(f'Num Features {len(features)}, not as expected ({n_features})')
     detectors = [
         anomaly_detection.BaseRollingAnomalyDetector(
             features=features,
@@ -119,12 +132,9 @@ if __name__ == '__main__':
 
         # Consolidate list of all permutations of simulated data parameters
         for anomaly_frequency in FREQUENCIES:
-            for n_features in N_FEATURES_LIST:
-                for window_size in WINDOW_SIZES:
-                    run_parameters = {}
-                    run_parameters['anomaly_frequency'] = anomaly_frequency
-                    run_parameters['n_features'] = n_features
-                    run_parameters['feature_params'] = {
+            for window_size in WINDOW_SIZES:
+                feature_param_dict = {
+                    'history_all_28': {
                         f'history-{28}_anomalyFrequency-{anomaly_frequency}_{i}': {
                             "min": 0,
                             "max": 10,
@@ -133,30 +143,50 @@ if __name__ == '__main__':
                             "history_len": 28,
                             "anomaly_frequency": anomaly_frequency,
                             "anomaly_std_scale": 3
-                        } for i in range(n_features)
-                    }
-                    run_parameters['param_name'] = 'history_all_28'
+                        } for i in range(N_FEATURES)
+                    },
+                    'history_0_to_28': {
+                        f'history-{feature_history}_anomalyFrequency-{anomaly_frequency}': {
+                            "min": 0,
+                            "max": 10,
+                            "mean": 5,
+                            "std": 2,
+                            "history_len": feature_history,
+                            "anomaly_frequency": anomaly_frequency,
+                            "anomaly_std_scale": 3
+                        } for feature_history in [0, 2, 7, 14, 28]
+                    },
+                }
+                for param_i, (param_name, feature_params) in enumerate(feature_param_dict.items()):
+                    run_parameters = {}
+                    run_parameters['anomaly_frequency'] = anomaly_frequency
+                    run_parameters['feature_params'] = feature_params
+                    run_parameters['param_name'] = param_name
                     run_parameters['window_size'] = window_size
                     run_list.append(run_parameters)
 
-        def expand_args_run(arg):
-            return run_ad_on_simulated(**arg)
+        def expand_args_run(kwargs):
+            return run_ad_on_simulated(**kwargs)
 
-        # Run parameters
-        datasets = p_map(expand_args_run, run_list)
-
-#        for i, run_params in tqdm(enumerate(run_list)):
-#            if i < 5:
-#                continue
-#            datasets.append(
-#                run_ad_on_simulated(**run_params)
-#            )
+        # Run parameters - simulation + anomaly detection
+        if PARALLEL:
+            # Parallel process
+            datasets = p_map(expand_args_run, run_list)
+        else:
+            # Don't parallel process
+            datasets = []
+            for i, run_params in tqdm(enumerate(run_list)):
+                if i < 2:
+                    continue
+                datasets.append(
+                    run_ad_on_simulated(**run_params)
+                )
 
         data_df = pd.concat(datasets)
         data_df.to_csv(fpath, index=False)
 
     anomaly_detector_cols = [d for d in data_df.columns if d.endswith("_anomaly")]
-    groupby_cols = ['subject_id', KEY_DIFFERENCE, 'window_size', 'anomaly_freq']
+    groupby_cols = ['subject_id', KEY_DIFFERENCE, 'window_size', 'n_features', 'anomaly_freq']
     print(f'Comparing across {KEY_DIFFERENCE}: ', data_df[KEY_DIFFERENCE].unique())
 
     # PERFORMANCE CALCULATIONS
@@ -191,6 +221,9 @@ if __name__ == '__main__':
 
     # PLOTTING
     print('Plotting...')
+    out_dir = Path('output', EXPERIMENT)
+    if not out_dir.exists():
+        out_dir.mkdir()
 
     # Plot correlation of # detected anomalies per subject/anomaly frequency
     hm_size = (10, 7)
@@ -202,7 +235,7 @@ if __name__ == '__main__':
             value_name='spearmanr'
         ).pivot_table(
             columns='window_size',
-            index=[KEY_DIFFERENCE, 'model'],
+            index=['model', KEY_DIFFERENCE],
             values='spearmanr',
         ),
         center=0,
@@ -213,7 +246,7 @@ if __name__ == '__main__':
         cmap='coolwarm',
         ax=ax
     )
-    fname = Path('output', EXPERIMENT, f'spearmanr_heatmap_n{N_SUBJECTS}.png')
+    fname = Path(out_dir, f'spearmanr_heatmap_n{N_SUBJECTS}.png')
     fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
     plt.tight_layout()
     plt.gcf().savefig(str(fname))
@@ -226,7 +259,7 @@ if __name__ == '__main__':
             performance_df.pivot_table(
                 values=metric,
                 columns=['anomaly_freq', 'window_size'],
-                index=[KEY_DIFFERENCE, 'model'],
+                index=['model', KEY_DIFFERENCE],
             ).round(2),
             annot=True,
             square=True,
@@ -234,7 +267,7 @@ if __name__ == '__main__':
             vmax=1,
             ax=ax
         )
-        fname = Path('output', EXPERIMENT, f'{metric}_heatmap_n{N_SUBJECTS}.png')
+        fname = Path(out_dir, f'{metric}_heatmap_n{N_SUBJECTS}.png')
         fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
         plt.tight_layout()
         plt.gcf().savefig(str(fname))
@@ -247,7 +280,7 @@ if __name__ == '__main__':
             anomaly_detector_behavior.pivot_table(
                 values='distance',
                 columns=['anomaly_freq', 'window_size'],
-                index=[KEY_DIFFERENCE, 'model'],
+                index=['model', KEY_DIFFERENCE],
                 aggfunc=metric,
             ),
             annot=True,
@@ -256,15 +289,12 @@ if __name__ == '__main__':
             ax=ax
         )
         fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
-        fname = Path('output', EXPERIMENT, f'distance_{metric}_heatmap_n{N_SUBJECTS}.png')
+        fname = Path(out_dir, f'distance_{metric}_heatmap_n{N_SUBJECTS}.png')
         plt.tight_layout()
         plt.gcf().savefig(str(fname))
         plt.close()
 
     print(performance_df.groupby('model').accuracy.describe().round(2))
-
-    # TODO: calculate how many induced anomalies were missed [no detected anomaly before next anomaly]
-    # TODO: calculate how many detected anomalies were before the first induced
 
     stop = time.perf_counter()
     print(f"\nCompleted in {stop - start:0.2f} seconds")
