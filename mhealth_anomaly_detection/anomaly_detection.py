@@ -85,6 +85,13 @@ class BaseRollingAnomalyDetector:
 
         # anomaly as mean + 2*std of reconstruction error
         anomaly_threshold = re_df['total_re'].mean() + 2*re_df['total_re'].std()
+        anomaly_threshold = re_df['total_re'].rolling(
+            window=self.window_size,
+            min_periods=self.window_size - self.max_missing_days,
+        ).mean() + 2*re_df['total_re'].rolling(
+            window=self.window_size,
+            min_periods=self.window_size - self.max_missing_days,
+        ).std()
         return re_df['total_re'] > anomaly_threshold
 
 

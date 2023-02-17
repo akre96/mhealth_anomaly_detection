@@ -15,6 +15,7 @@ ipykernel = "^6.19.2"
 tqdm = "^4.64.1"
 seaborn = "^0.12.1"
 p-tqdm = "^1.4.0"
+miceforest = "^5.6.3"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.2"

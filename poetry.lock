@@ -44,6 +44,14 @@ optional = false
 python-versions = "*"
 
 [[package]]
+name = "blosc"
+version = "1.11.1"
+description = "Blosc data compressor"
+category = "main"
+optional = false
+python-versions = ">=3.8"
+
+[[package]]
 name = "cffi"
 version = "1.15.1"
 description = "Foreign Function Interface for Python calling C code."
@@ -335,6 +343,23 @@ optional = false
 python-versions = ">=3.7"
 
 [[package]]
+name = "lightgbm"
+version = "3.3.5"
+description = "LightGBM Python Package"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+numpy = "*"
+scikit-learn = "!=0.22.0"
+scipy = "*"
+wheel = "*"
+
+[package.extras]
+dask = ["dask[array] (>=2.0.0)", "dask[dataframe] (>=2.0.0)", "dask[distributed] (>=2.0.0)", "pandas"]
+
+[[package]]
 name = "matplotlib"
 version = "3.6.2"
 description = "Python plotting package"
@@ -372,6 +397,25 @@ description = "McCabe checker, plugin for flake8"
 category = "main"
 optional = false
 python-versions = ">=3.6"
+
+[[package]]
+name = "miceforest"
+version = "5.6.3"
+description = "Missing Value Imputation using LightGBM"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.dependencies]
+blosc = "*"
+dill = "*"
+lightgbm = ">=3.3.1"
+numpy = "*"
+
+[package.extras]
+default-mm = ["scipy (>=1.6.0)"]
+plotting = ["matplotlib (>=3.3.0)", "seaborn (>=0.11.0)"]
+testing = ["pandas", "sklearn"]
 
 [[package]]
 name = "multiprocess"
@@ -872,10 +916,21 @@ category = "main"
 optional = false
 python-versions = "*"
 
+[[package]]
+name = "wheel"
+version = "0.38.4"
+description = "A built-package format for Python"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.extras]
+test = ["pytest (>=3.0.0)"]
+
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "c90635d7e8d34069c2c1adb7b699b3ca129c9534a7c593a057363819ecc6cfdf"
+content-hash = "3a2fc368bede0c7fcb6155cc8bf9bf9c1f014de8b3bfb0ba4c55df20b5b9bb60"
 
 [metadata.files]
 appnope = [
@@ -893,6 +948,41 @@ attrs = [
 backcall = [
     {file = "backcall-0.2.0-py2.py3-none-any.whl", hash = "sha256:fbbce6a29f263178a1f7915c1940bde0ec2b2a967566fe1c65c1dfb7422bd255"},
     {file = "backcall-0.2.0.tar.gz", hash = "sha256:5cbdbf27be5e7cfadb448baf0aa95508f91f2bbc6c6437cd9cd06e2a4c215e1e"},
+]
+blosc = [
+    {file = "blosc-1.11.1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:345577759e5e1cd0905faf89ad1dbcc60bb7a56b759985a417c5b0cab0e0117a"},
+    {file = "blosc-1.11.1-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:8907404c3058ac4a767a0a8b279c4c5aaf90431b7238f5b9b464eebe50b91010"},
+    {file = "blosc-1.11.1-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:41578759a913122ba63c24750cb53f861a557a0946f5bb80ad62625e95c7f45a"},
+    {file = "blosc-1.11.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:bba4cfbc0a86788eb38acc05eb35ba97e2897441416c5f927f243ed7b4b406b6"},
+    {file = "blosc-1.11.1-cp310-cp310-musllinux_1_1_aarch64.whl", hash = "sha256:705df0302ba73293b6109800110994841d5de4491318a3b06c5bbcec32756939"},
+    {file = "blosc-1.11.1-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:bef546a039a1d984c6d2ed516ffcbc2a09dbbba61a0951c5197fad3f718095b1"},
+    {file = "blosc-1.11.1-cp310-cp310-win32.whl", hash = "sha256:5d0ceff7a19f3c5c42d9d5ec13a90ae0b69cb2731e797a58ca0e3b25018cbb69"},
+    {file = "blosc-1.11.1-cp310-cp310-win_amd64.whl", hash = "sha256:f889715e28bbdc2f927a546f8debf403947cea1e3dd8f15e1428b66701416ee6"},
+    {file = "blosc-1.11.1-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:88c2eba2c9c013e44d5841660f7832425ebdc0bcfce9e11c59a8eb732f28cf9d"},
+    {file = "blosc-1.11.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:8321241c37f25ad4a21e3e0731246753b557dd8910eaee32bf7510eeee03648a"},
+    {file = "blosc-1.11.1-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:417fb44fd50887e4b3e2f8fc91f350c791bf0e39a1b4d45a41071fc416fb767a"},
+    {file = "blosc-1.11.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a74c7bc804c608de4dc53c873f8ef5b481b9e3b0b6381e7d3fcff92683de9547"},
+    {file = "blosc-1.11.1-cp311-cp311-musllinux_1_1_aarch64.whl", hash = "sha256:94010a4fc094dda5a9abd9546e1f97af9a7dbd903a6eee39dd13244c7c419412"},
+    {file = "blosc-1.11.1-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:dfbb2bb0a3a69006ad0c627247b53e8ed5f844fc5cd5f09979f1e174f6dc4a6e"},
+    {file = "blosc-1.11.1-cp311-cp311-win32.whl", hash = "sha256:7b40a99add3120a26bc92e7a751a01e4aa854fc1835e0d12e9cf77dbf5498a2a"},
+    {file = "blosc-1.11.1-cp311-cp311-win_amd64.whl", hash = "sha256:751a4ad8b4696d1c54f05a5255fe911d72f424cd03a9ce97525d67f40946b2ea"},
+    {file = "blosc-1.11.1-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:cf25b0aaf209411ad7ff65f42ee6c42e87d2a9161990743cb21ea264a4509e7b"},
+    {file = "blosc-1.11.1-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:2078f8d4500c83387a0e1c3f750c9a6d4848a80e1bf07ec1fd9c87bb1e2e2e92"},
+    {file = "blosc-1.11.1-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:038ab5690c016a15cc5bf47977ae57b9cb4517f5df3eccd895c2d6c6656da6e6"},
+    {file = "blosc-1.11.1-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8e2283eb29c5938bfc63ae4091e0b3df5ef0492f83b9ffffa184532d1e5e7f8c"},
+    {file = "blosc-1.11.1-cp38-cp38-musllinux_1_1_aarch64.whl", hash = "sha256:1bfc0a2cd115aa6eac75b841840b00fee0dd7bf77793650bdf470e12cf105627"},
+    {file = "blosc-1.11.1-cp38-cp38-musllinux_1_1_x86_64.whl", hash = "sha256:31ed162c9cc916c393eb9dada1beb632b11d4646afdf708c1c3f9d38402a4fab"},
+    {file = "blosc-1.11.1-cp38-cp38-win32.whl", hash = "sha256:b113c900cfb47272b63f0dbee95016e24720d24d46009aa558e131128fb26aa5"},
+    {file = "blosc-1.11.1-cp38-cp38-win_amd64.whl", hash = "sha256:da627a51bc2947a698097ac0ccf2f6e51a3aed77f2d4297295365ef8a18d748e"},
+    {file = "blosc-1.11.1-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:69cf3d2bc196befe4adddc3cca08315fd9e05208887b9fe031942e204d48ed49"},
+    {file = "blosc-1.11.1-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:270cf6aa4da391950e0140cc9ee9ced8562e04d4eb1473fa42fc454b81eaeb80"},
+    {file = "blosc-1.11.1-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:24dfeafbbe0b4b6a028fcfd22c3920be738d6ef9e9d2ffcb2b66153f18ad455d"},
+    {file = "blosc-1.11.1-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:bf07fccaa1d76fdb03d4eed641a71f2f54be1d1bffba9300bab4c8f437017b46"},
+    {file = "blosc-1.11.1-cp39-cp39-musllinux_1_1_aarch64.whl", hash = "sha256:c793b3e33d025161bd3f8dcacc9bdfa011218eafbc607e195360456d3306ebf9"},
+    {file = "blosc-1.11.1-cp39-cp39-musllinux_1_1_x86_64.whl", hash = "sha256:aa129006fabeec63a1e54d30863e0a0330ec72caedbd5a5c282121796e84e1a0"},
+    {file = "blosc-1.11.1-cp39-cp39-win32.whl", hash = "sha256:213ce859c89625c64776c8a59c6b235bca6dea81c185a273703366e733880ff5"},
+    {file = "blosc-1.11.1-cp39-cp39-win_amd64.whl", hash = "sha256:9c6371779ca9ec469735b05ee0a119cc431d72008f9f2813ca73d4acf2b39b2f"},
+    {file = "blosc-1.11.1.tar.gz", hash = "sha256:c22119b27bae1063a697f639028b422d55811b0880c3fc0149cbdea791d0b276"},
 ]
 cffi = [
     {file = "cffi-1.15.1-cp27-cp27m-macosx_10_9_x86_64.whl", hash = "sha256:a66d3508133af6e8548451b25058d5812812ec3798c886bf38ed24a98216fab2"},
@@ -1189,6 +1279,13 @@ kiwisolver = [
     {file = "kiwisolver-1.4.4-pp39-pypy39_pp73-win_amd64.whl", hash = "sha256:36dafec3d6d6088d34e2de6b85f9d8e2324eb734162fba59d2ba9ed7a2043d5b"},
     {file = "kiwisolver-1.4.4.tar.gz", hash = "sha256:d41997519fcba4a1e46eb4a2fe31bc12f0ff957b2b81bac28db24744f333e955"},
 ]
+lightgbm = [
+    {file = "lightgbm-3.3.5-py3-none-macosx_10_15_x86_64.macosx_11_6_x86_64.macosx_12_0_x86_64.whl", hash = "sha256:843dd37c00a1096a8898b80e368b3eef7f5a5d327d1fd9eb770b6f3c2e1edc49"},
+    {file = "lightgbm-3.3.5-py3-none-manylinux1_x86_64.whl", hash = "sha256:044f65664c1a32c98cb619bafa97d8cd9d93c2c2d5053376aadfe509a3a3e7fa"},
+    {file = "lightgbm-3.3.5-py3-none-manylinux2014_aarch64.whl", hash = "sha256:ef01e46939293a0a36729350a7384dc17a36880176d0f17d82b738bbe77e4528"},
+    {file = "lightgbm-3.3.5-py3-none-win_amd64.whl", hash = "sha256:02a40745c1972cf4a2cde764c7739228f45178c2237af2df40fde7063a58ac6a"},
+    {file = "lightgbm-3.3.5.tar.gz", hash = "sha256:10b8fbdcf851e4f68a1f02f38d99bdc44c7c7fb9b1a62dcf924a0d29ff73395c"},
+]
 matplotlib = [
     {file = "matplotlib-3.6.2-cp310-cp310-macosx_10_12_universal2.whl", hash = "sha256:8d0068e40837c1d0df6e3abf1cdc9a34a6d2611d90e29610fa1d2455aeb4e2e5"},
     {file = "matplotlib-3.6.2-cp310-cp310-macosx_10_12_x86_64.whl", hash = "sha256:252957e208c23db72ca9918cb33e160c7833faebf295aaedb43f5b083832a267"},
@@ -1239,6 +1336,10 @@ matplotlib-inline = [
 mccabe = [
     {file = "mccabe-0.7.0-py2.py3-none-any.whl", hash = "sha256:6c2d30ab6be0e4a46919781807b4f0d834ebdd6c6e3dca0bda5a15f863427b6e"},
     {file = "mccabe-0.7.0.tar.gz", hash = "sha256:348e0240c33b60bbdf4e523192ef919f28cb2c3d7d5c7794f74009290f236325"},
+]
+miceforest = [
+    {file = "miceforest-5.6.3-py3-none-any.whl", hash = "sha256:79f6651cb91d0267f137eb836f62a77757436f745deda9c42e256de753bcb144"},
+    {file = "miceforest-5.6.3.tar.gz", hash = "sha256:35b32a30a4b3cba1cf1de2f852e415220c88419e28cd75c73bb3b5364caff3c7"},
 ]
 multiprocess = [
     {file = "multiprocess-0.70.14-pp37-pypy37_pp73-macosx_10_9_x86_64.whl", hash = "sha256:560a27540daef4ce8b24ed3cc2496a3c670df66c96d02461a4da67473685adf3"},
@@ -1677,4 +1778,8 @@ typing-extensions = [
 wcwidth = [
     {file = "wcwidth-0.2.5-py2.py3-none-any.whl", hash = "sha256:beb4802a9cebb9144e99086eff703a642a13d6a0052920003a230f3294bbe784"},
     {file = "wcwidth-0.2.5.tar.gz", hash = "sha256:c4d647b99872929fdb7bdcaa4fbe7f01413ed3d98077df798530e5b04f116c83"},
+]
+wheel = [
+    {file = "wheel-0.38.4-py3-none-any.whl", hash = "sha256:b60533f3f5d530e971d6737ca6d58681ee434818fab630c83a734bb10c083ce8"},
+    {file = "wheel-0.38.4.tar.gz", hash = "sha256:965f5259b566725405b05e7cf774052044b1ed30119b5d586b2703aafe8719ac"},
 ]
