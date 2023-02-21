@@ -17,10 +17,12 @@ class BaseRollingAnomalyDetector:
         features: list,
         window_size: int = 7,
         max_missing_days: int = 2,
+        re_std_threshold: float = 2.0,
     ):
         self.window_size = window_size
         self.max_missing_days = max_missing_days
         self.features = features
+        self.re_std_threshold = re_std_threshold
         self.reconstruction_error: pd.DataFrame = pd.DataFrame()
         self.name = 'RollingMean'
     
@@ -78,17 +80,14 @@ class BaseRollingAnomalyDetector:
 
     # Return if anomalous day labels
     def labelAnomaly(self, subject_data: pd.DataFrame) -> pd.Series:
-        if not self.reconstruction_error.empty:
-            re_df = self.reconstruction_error
-        else:
-            re_df = self.getReconstructionError(subject_data)
+        re_df = self.getReconstructionError(subject_data)
 
         # anomaly as mean + 2*std of reconstruction error
         anomaly_threshold = re_df['total_re'].mean() + 2*re_df['total_re'].std()
         anomaly_threshold = re_df['total_re'].rolling(
             window=self.window_size,
             min_periods=self.window_size - self.max_missing_days,
-        ).mean() + 2*re_df['total_re'].rolling(
+        ).mean() + self.re_std_threshold*re_df['total_re'].rolling(
             window=self.window_size,
             min_periods=self.window_size - self.max_missing_days,
         ).std()
@@ -207,9 +206,15 @@ class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
         self.n_components = n_components
         self.model = Pipeline([
                     ('scaler', RobustScaler()),
-                    ('svm', OneClassSVM(degree=n_components, kernel=kernel))
+                    (
+                        'svm', 
+                        OneClassSVM(
+                            degree=n_components,
+                            kernel=kernel
+                        )
+                    )
                 ])
-        self.name = 'SVM' + '_' + str(n_components)
+        self.name = 'SVM' + '_' + str(kernel)
         self.window_size = window_size
         self.max_missing_days = max_missing_days
         self.features = features

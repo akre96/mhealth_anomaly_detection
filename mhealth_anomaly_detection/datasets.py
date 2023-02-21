@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from typing import List
+from tqdm.auto import tqdm
 
 class DatasetBase:
     def __init(
@@ -96,6 +97,7 @@ class GLOBEM(DatasetBase):
         self.id_cols = self.id_cols + ['study_day']
         return reform_data
 
+    # TODO: Test function
     def fill_empty_days(
         self,
         data: pd.DataFrame
@@ -283,6 +285,62 @@ class GLOBEM(DatasetBase):
         print(f'Filtering high missing participants - removing', len(remove_participants), 'from dataset')
         filtered = data[~data.subject_id.isin(remove_participants)]       
         return filtered
+
+    @staticmethod
+    def get_phq_periods(data, features, period=1) -> pd.DataFrame:
+        anomaly_detector_cols = [d for d in data.columns if d.endswith("_anomaly")]
+        if len(anomaly_detector_cols) == 0:
+            raise ValueError('No anomaly detector columns')
+        
+        phq = data[['subject_id', 'study_day', 'phq4']]\
+                .dropna()\
+                .reset_index(drop=True)\
+                .sort_values(by=['subject_id', 'study_day'])
+
+        results_dict = {
+            'subject_id': [],
+            'start': [],
+            'stop': [],
+            'days': [],
+            'complete_days': [],
+            'phq_start': [],
+            'phq_stop': [],
+            'phq_change': [],
+            **{
+                c: [] for c in anomaly_detector_cols
+            },
+        }
+
+        for i, row in tqdm(phq.iterrows()):
+            last_row = phq.iloc[i-period]
+            if last_row['subject_id'] != row['subject_id']:
+                continue
+
+            anomalies = data.loc[
+                (
+                    (data.subject_id == row['subject_id']) &
+                    (data.study_day > last_row['study_day']) &
+                    (data.study_day <= row['study_day'])
+                ),
+                features + anomaly_detector_cols
+            ]
+            results_dict['subject_id'].append(row['subject_id'])
+            results_dict['start'].append(last_row['study_day'])
+            results_dict['stop'].append(row['study_day'])
+            results_dict['days'] = row['study_day'] - last_row['study_day']
+            results_dict['complete_days'].append(anomalies[features].dropna().shape[0])
+            results_dict['phq_start'].append(last_row['phq4'])
+            results_dict['phq_stop'].append(row['phq4'])
+            results_dict['phq_change'].append(row['phq4'] - last_row['phq4'])
+            for c in anomaly_detector_cols:
+                if anomalies[c].isnull().all():
+                    results_dict[c].append(np.nan)
+                else:
+                    results_dict[c].append(anomalies[c].sum())
+                
+        results = pd.DataFrame(results_dict)
+        results['period'] = period
+        return results.dropna()
 
 
 class CrossCheck(DatasetBase):
