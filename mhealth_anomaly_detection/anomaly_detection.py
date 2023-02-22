@@ -7,6 +7,7 @@ from sklearn.decomposition import PCA
 from sklearn.svm import OneClassSVM
 from sklearn.preprocessing import RobustScaler
 from sklearn.pipeline import Pipeline
+import scipy.stats as stats
 from mhealth_anomaly_detection.onmf import Online_NMF
 
 
@@ -112,7 +113,13 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                     ('scaler', RobustScaler()),
                     ('pca', PCA(n_components=n_components, whiten=True))
                 ])
-        self.name = 'PCA' + '_' + str(n_components)
+        str_nc = str(n_components)
+        if n_components < 10:
+            str_nc = f'00{str_nc}'
+        elif n_components < 100:
+            str_nc = f'0{str_nc}'
+
+        self.name = 'PCA' + '_' + str_nc
         self.window_size = window_size
         self.max_missing_days = max_missing_days
         self.features = features
@@ -268,7 +275,14 @@ class NMFRollingAnomalyDetector(BaseRollingAnomalyDetector):
         self.window_size = window_size
         self.max_missing_days = max_missing_days
         self.features = features
-        self.name = 'NMF' + '_' + str(n_components)
+
+        str_nc = str(n_components)
+        if n_components < 10:
+            str_nc = f'00{str_nc}'
+        elif n_components < 100:
+            str_nc = f'0{str_nc}'
+
+        self.name = 'NMF' + '_' + str_nc
 
     def getReconstructionError(
         self,
@@ -347,7 +361,7 @@ def correlate_detected_to_induced(
     data: pd.DataFrame,
     anomaly_detector_cols: List[str],
     groupby_cols: List[str],
-    corr_across: List[str]
+    corr_across: List[str],
 ) -> pd.DataFrame:
     for c in corr_across:
         if c not in groupby_cols:
@@ -362,21 +376,33 @@ def correlate_detected_to_induced(
         ['anomaly'] + anomaly_detector_cols
     ].sum(numeric_only=False)
 
+    corr_dict = {
+        'detector': [],
+        'rho': [],
+        'p': [],
+        'n': [],
+        **{
+            inf: [] for inf in corr_across
+        }
+    }
+    for info, i_df in detected_anomalies.groupby(corr_across):
+        for d in anomaly_detector_cols:
+            n = i_df[[d, 'anomaly']].dropna().shape[0]
+            rho, p = stats.spearmanr(
+                i_df.dropna()[d],
+                i_df.dropna()['anomaly']
+            )
+            if not np.isnan(p):
+                corr_dict['detector'].append(d)
+                for i in range(len(corr_across)):
+                    corr_dict[corr_across[i]].append(info[i])
+                corr_dict['n'].append(n)
+                corr_dict['rho'].append(rho)
+                corr_dict['p'].append(p)
+    return pd.DataFrame(corr_dict.rename({
+        c: c.split('_anomaly')[0] for c in anomaly_detector_cols
+    })) 
     
-    # Results are for correlation of # anomalies detected to # induced
-    results = []
-    for c in anomaly_detector_cols:
-        # Get spearman correlation of # detected anomalies per subject/anomaly frequency
-        # Separate different data generation types (history_type) and model training window size
-        res = detected_anomalies.reset_index()\
-            .groupby(corr_across)[['anomaly', c]]\
-            .corr(method='spearman').reset_index()
-        res = res[res[f'level_{len(corr_across)}'] == 'anomaly'][corr_across + [c]]\
-            .rename(columns={c:c.split('_anomaly')[0]})\
-            .set_index(corr_across)
-        results.append(res)
-    correlation_df = pd.concat(results, axis=1).reset_index()
-    return correlation_df
 
 # Calculate accuracy, sensitivity and specificity
 def performance_metrics(
@@ -501,3 +527,37 @@ if __name__ == '__main__':
                 re['anomaly'] = anomalyDetector.labelAnomaly(re)
                 print(re)
                 break
+
+def correlateDetectedToOutcome(
+    detected_anomalies: pd.DataFrame,
+    anomaly_detector_cols: List[str],
+    outcome_col: str,
+    groupby_cols: List[str],
+) -> pd.DataFrame:
+    corr_dict = {
+        'detector': [],
+        'rho': [],
+        'p': [],
+        'n': [],
+        **{
+            inf: [] for inf in groupby_cols
+        }
+    }
+    for info, i_df in detected_anomalies.groupby(groupby_cols):
+        for d in anomaly_detector_cols:
+            d_df = i_df[[d, outcome_col]].dropna()
+            n = d_df.shape[0]
+            rho, p = stats.spearmanr(
+                d_df[d],
+                d_df[outcome_col]
+            )
+            if not np.isnan(p):
+                corr_dict['detector'].append(d)
+                for i in range(len(groupby_cols)):
+                    corr_dict[groupby_cols[i]].append(info[i])
+                corr_dict['n'].append(n)
+                corr_dict['rho'].append(rho)
+                corr_dict['p'].append(p)
+    return pd.DataFrame(corr_dict).rename({
+        c: c.split('_anomaly')[0] for c in anomaly_detector_cols
+    })

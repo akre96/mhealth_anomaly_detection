@@ -32,6 +32,7 @@ class GLOBEM(DatasetBase):
             'call',
             'bluetooth'
         ],
+        load_data: bool = True
     ):
         if year not in [2, 3, 4]:
             raise ValueError('Year for the GLOBEM dataset analysis must be 2, 3, or 4')
@@ -64,10 +65,11 @@ class GLOBEM(DatasetBase):
         self.id_cols = ['pid', 'platform', 'date']
         self.feature_cols = []
 
-        self.data_raw = self.combine_data()
-        self.data = self.preprocess(self.data_raw)
+        if load_data:
+            self.data_raw = self.combine_data()
+            self.data = self.preprocess(self.data_raw)
 
-        self.sensor_cols = [f for f in self.feature_cols if f != 'phq4']
+            self.sensor_cols = [f for f in self.feature_cols if f != 'phq4']
 
     def preprocess(self, data_raw) -> pd.DataFrame:
         data = self.filter_high_missing_cols(data_raw).rename(
@@ -81,6 +83,8 @@ class GLOBEM(DatasetBase):
         data = self.add_study_day(data)
         data = self.fill_empty_days(data)
         data = self.filter_high_missing_participants(data)
+        data = self.add_missingness_indicator(data)
+
         return data[self.id_cols + self.feature_cols]
 
     def add_study_day(self, data) -> pd.DataFrame:
@@ -285,6 +289,27 @@ class GLOBEM(DatasetBase):
         print(f'Filtering high missing participants - removing', len(remove_participants), 'from dataset')
         filtered = data[~data.subject_id.isin(remove_participants)]       
         return filtered
+    
+    def add_missingness_indicator(self, data) -> pd.DataFrame:
+        print('Adding missingness indicator variables')
+        passive_feature_rep = {
+            'location': 'f_loc:phone_locations_doryab_locationentropy:allday',
+            'steps': 'f_steps:fitbit_steps_intraday_rapids_sumsteps:allday',
+            'sleep': 'f_slp:fitbit_sleep_intraday_rapids_sumdurationasleepunifiedmain:allday',
+            'call': 'f_call:phone_calls_rapids_outgoing_sumduration:allday',
+        }
+        n_feats = len(self.feature_cols)
+        for var in self.sensor_data_types:
+            if var not in passive_feature_rep.keys():
+                print(f'\n ~~ WARNING {var} data type has no variable set to look for missingness ~~ \n')
+                continue
+            missing_indicator = f'{var}_missing'
+            data[missing_indicator] = data[var].isna()
+            self.feature_cols.append(missing_indicator)
+
+        print(f'\tAdded {len(self.feature_cols) - n_feats} missingness indicator variables, total features: {len(self.feature_cols)}')
+        return data
+
 
     @staticmethod
     def get_phq_periods(data, features, period=1) -> pd.DataFrame:
@@ -295,7 +320,8 @@ class GLOBEM(DatasetBase):
         phq = data[['subject_id', 'study_day', 'phq4']]\
                 .dropna()\
                 .reset_index(drop=True)\
-                .sort_values(by=['subject_id', 'study_day'])
+                .sort_values(by=['subject_id', 'study_day'])\
+                .drop_duplicates()
 
         results_dict = {
             'subject_id': [],
@@ -340,7 +366,7 @@ class GLOBEM(DatasetBase):
                 
         results = pd.DataFrame(results_dict)
         results['period'] = period
-        return results.dropna()
+        return results
 
 
 class CrossCheck(DatasetBase):

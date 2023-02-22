@@ -39,7 +39,7 @@ N_SUBJECTS = 100
 DAYS_OF_DATA = 90
 FREQUENCIES = [2, 7, 14, 28]
 WINDOW_SIZES = [7, 14, 28] # Can likely reduce to 2
-N_FEATURES = 5
+N_FEATURES = 15
 KEY_DIFFERENCE = 'history_type'
 
 def run_ad_on_simulated(
@@ -97,12 +97,27 @@ def run_ad_on_simulated(
             features=features,
             window_size=window_size,
             max_missing_days=0,
-            n_components=n_components
-        )
+            n_components=n_components,
+            kernel='poly'
+        ),
+        anomaly_detection.SVMRollingAnomalyDetector(
+            features=features,
+            window_size=window_size,
+            max_missing_days=0,
+            n_components=n_components,
+            kernel='sigmoid'
+        ),
+        anomaly_detection.SVMRollingAnomalyDetector(
+            features=features,
+            window_size=window_size,
+            max_missing_days=0,
+            n_components=n_components,
+            kernel='rbf'
+        ),
     ]
     for detector in detectors:
         # Remove # of components from name
-        dname = detector.name.split('_')[0]
+        dname = detector.name.split
         data[f'{dname}_anomaly'] = np.nan
         for sid in data.subject_id.unique():
             subject_data = data.loc[data.subject_id == sid]
