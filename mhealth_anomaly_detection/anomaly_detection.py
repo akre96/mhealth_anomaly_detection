@@ -356,53 +356,6 @@ class NMFRollingAnomalyDetector(BaseRollingAnomalyDetector):
 
         return re_df
 
-# Correlation between # detected and induced anomalies
-def correlate_detected_to_induced(
-    data: pd.DataFrame,
-    anomaly_detector_cols: List[str],
-    groupby_cols: List[str],
-    corr_across: List[str],
-) -> pd.DataFrame:
-    for c in corr_across:
-        if c not in groupby_cols:
-            raise ValueError(f'All vars in corr_across must by in groupby_cols, {c} not found')
-
-    # Ensure bool
-    for c in ['anomaly', *anomaly_detector_cols]:
-        data[c] = data[c].astype(bool)
-
-    # Anomalies detected per subject/model
-    detected_anomalies = data.groupby(groupby_cols)[
-        ['anomaly'] + anomaly_detector_cols
-    ].sum(numeric_only=False)
-
-    corr_dict = {
-        'detector': [],
-        'rho': [],
-        'p': [],
-        'n': [],
-        **{
-            inf: [] for inf in corr_across
-        }
-    }
-    for info, i_df in detected_anomalies.groupby(corr_across):
-        for d in anomaly_detector_cols:
-            n = i_df[[d, 'anomaly']].dropna().shape[0]
-            rho, p = stats.spearmanr(
-                i_df.dropna()[d],
-                i_df.dropna()['anomaly']
-            )
-            if not np.isnan(p):
-                corr_dict['detector'].append(d)
-                for i in range(len(corr_across)):
-                    corr_dict[corr_across[i]].append(info[i])
-                corr_dict['n'].append(n)
-                corr_dict['rho'].append(rho)
-                corr_dict['p'].append(p)
-    return pd.DataFrame(corr_dict.rename({
-        c: c.split('_anomaly')[0] for c in anomaly_detector_cols
-    })) 
-    
 
 # Calculate accuracy, sensitivity and specificity
 def performance_metrics(
@@ -561,3 +514,30 @@ def correlateDetectedToOutcome(
     return pd.DataFrame(corr_dict).rename({
         c: c.split('_anomaly')[0] for c in anomaly_detector_cols
     })
+
+# Correlation between # detected and induced anomalies in simulation
+def correlateDetectedToInduced(
+    data: pd.DataFrame,
+    anomaly_detector_cols: List[str],
+    groupby_cols: List[str],
+    corr_across: List[str],
+) -> pd.DataFrame:
+    for c in corr_across:
+        if c not in groupby_cols:
+            raise ValueError(f'corr_across value {c} not found in groupby_cols')
+
+    # Ensure bool
+    for c in ['anomaly', *anomaly_detector_cols]:
+        data[c] = data[c].astype(bool)
+
+    # Anomalies detected per subject/model
+    detected_anomalies = data.groupby(groupby_cols)[
+        ['anomaly'] + anomaly_detector_cols
+    ].sum(numeric_only=False).reset_index()
+
+    return correlateDetectedToOutcome(
+        detected_anomalies,
+        anomaly_detector_cols,
+        'anomaly',
+        corr_across
+    )

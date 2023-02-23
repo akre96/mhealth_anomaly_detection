@@ -352,6 +352,6 @@ def test_perfect_correlation():
     )
     print(correlation_df)
     assert correlation_df.shape[0] == 1
-    assert np.all(correlation_df.model == 1)
+    assert np.all(correlation_df.rho == 1)
 
 

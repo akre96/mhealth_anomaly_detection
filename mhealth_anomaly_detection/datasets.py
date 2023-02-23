@@ -304,7 +304,7 @@ class GLOBEM(DatasetBase):
                 print(f'\n ~~ WARNING {var} data type has no variable set to look for missingness ~~ \n')
                 continue
             missing_indicator = f'{var}_missing'
-            data[missing_indicator] = data[var].isna()
+            data[missing_indicator] = data[passive_feature_rep[var]].isna().astype(int)
             self.feature_cols.append(missing_indicator)
 
         print(f'\tAdded {len(self.feature_cols) - n_feats} missingness indicator variables, total features: {len(self.feature_cols)}')
