@@ -4,6 +4,7 @@ from typing import List
 import pandas as pd
 from tqdm.auto import tqdm
 from sklearn.decomposition import PCA
+from sklearn.ensemble import IsolationForest
 from sklearn.svm import OneClassSVM
 from sklearn.preprocessing import RobustScaler
 from sklearn.pipeline import Pipeline
@@ -80,11 +81,13 @@ class BaseRollingAnomalyDetector:
         return re_df
 
     # Return if anomalous day labels
-    def labelAnomaly(self, subject_data: pd.DataFrame) -> pd.Series:
-        re_df = self.getReconstructionError(subject_data)
+    def labelAnomaly(self, subject_data: pd.DataFrame, recalc_re: bool = True) -> pd.Series:
+        if self.reconstruction_error.empty or recalc_re:
+            re_df = self.getReconstructionError(subject_data)
+        else:
+            re_df = self.reconstruction_error
 
         # anomaly as mean + 2*std of reconstruction error
-        anomaly_threshold = re_df['total_re'].mean() + 2*re_df['total_re'].std()
         anomaly_threshold = re_df['total_re'].rolling(
             window=self.window_size,
             min_periods=self.window_size - self.max_missing_days,
@@ -102,11 +105,13 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
         window_size: int = 7,
         max_missing_days: int = 2,
         n_components: int = 3,
+        re_std_threshold: float = 2
     ):
         super().__init__(
             features,
             window_size,
-            max_missing_days
+            max_missing_days,
+            re_std_threshold
         )
         self.n_components = n_components
         self.model = Pipeline([
@@ -120,9 +125,6 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
             str_nc = f'0{str_nc}'
 
         self.name = 'PCA' + '_' + str_nc
-        self.window_size = window_size
-        self.max_missing_days = max_missing_days
-        self.features = features
     
     def getReconstructionError(
         self,
@@ -208,7 +210,7 @@ class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
         super().__init__(
             features,
             window_size,
-            max_missing_days
+            max_missing_days,
         )
         self.n_components = n_components
         self.model = Pipeline([
@@ -222,9 +224,6 @@ class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
                     )
                 ])
         self.name = 'SVM' + '_' + str(kernel)
-        self.window_size = window_size
-        self.max_missing_days = max_missing_days
-        self.features = features
     
     def labelAnomaly(self, subject_data: pd.DataFrame) -> NDArray:
         anomaly_labels = np.full(subject_data.shape[0], 0)
@@ -265,11 +264,13 @@ class NMFRollingAnomalyDetector(BaseRollingAnomalyDetector):
         window_size: int = 7,
         max_missing_days: int = 2,
         n_components: int = 3,
+        re_std_threshold: float = 2.0,
     ):
         super().__init__(
             features,
             window_size,
-            max_missing_days
+            max_missing_days,
+            re_std_threshold
         )
         self.n_components = n_components
         self.window_size = window_size
@@ -356,6 +357,23 @@ class NMFRollingAnomalyDetector(BaseRollingAnomalyDetector):
 
         return re_df
 
+class IFRollingAnomalyDetector(SVMRollingAnomalyDetector):
+    def __init__(
+        self,
+        features: list,
+        window_size: int = 7,
+        max_missing_days: int = 2,
+    ):
+        super().__init__(
+            features,
+            window_size,
+            max_missing_days
+        )
+        self.model = IsolationForest()
+        self.name = 'IsolationForest'
+        self.window_size = window_size
+        self.max_missing_days = max_missing_days
+        self.features = features
 
 # Calculate accuracy, sensitivity and specificity
 def performance_metrics(
@@ -391,10 +409,14 @@ def performance_metrics(
     performance_df = pd.DataFrame(performance_dict)
     performance_df['sensitivity'] = performance_df['true_positives'] \
         / (performance_df['true_positives'] + performance_df['false_negatives'])
+    performance_df['precision'] = performance_df['true_positives'] \
+        / (performance_df['true_positives'] + performance_df['false_positives'])
     performance_df['specificity'] = performance_df['true_negatives'] \
         / (performance_df['true_negatives'] + performance_df['false_positives']) 
     performance_df['accuracy'] = performance_df[['true_positives', 'true_negatives']].sum(axis=1) \
         / performance_df[['true_positives', 'true_negatives', 'false_positives', 'false_negatives']].sum(axis=1)
+    performance_df['F1'] = 2*performance_df['sensitivity']*performance_df['precision'] \
+        / performance_df[['sensitivity', 'precision']].sum(axis=1)
     return performance_df
 
 
@@ -500,17 +522,19 @@ def correlateDetectedToOutcome(
         for d in anomaly_detector_cols:
             d_df = i_df[[d, outcome_col]].dropna()
             n = d_df.shape[0]
-            rho, p = stats.spearmanr(
-                d_df[d],
-                d_df[outcome_col]
-            )
-            if not np.isnan(p):
-                corr_dict['detector'].append(d)
-                for i in range(len(groupby_cols)):
-                    corr_dict[groupby_cols[i]].append(info[i])
-                corr_dict['n'].append(n)
-                corr_dict['rho'].append(rho)
-                corr_dict['p'].append(p)
+            if (d_df[d].nunique() == 1) or (d_df[outcome_col].nunique() == 1):
+                rho, p = (0, 1)
+            else:
+                rho, p = stats.spearmanr(
+                    d_df[d],
+                    d_df[outcome_col]
+                )
+            corr_dict['detector'].append(d)
+            for i in range(len(groupby_cols)):
+                corr_dict[groupby_cols[i]].append(info[i])
+            corr_dict['n'].append(n)
+            corr_dict['rho'].append(rho)
+            corr_dict['p'].append(p)
     return pd.DataFrame(corr_dict).rename({
         c: c.split('_anomaly')[0] for c in anomaly_detector_cols
     })

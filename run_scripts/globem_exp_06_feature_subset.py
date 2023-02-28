@@ -32,7 +32,7 @@ from mhealth_anomaly_detection import format_axis as fa
 DEBUG = False
 
 PARALLEL = True
-USE_CACHE = False
+USE_CACHE = True
 USE_CACHE_INTERMEDIATE = False
 
 # Ignore divide by 0 error -> expected and happens in PCA
@@ -246,7 +246,7 @@ if __name__ == '__main__':
         d for d in phq_anomalies.columns if d.endswith("_anomaly")
     ]
     phq_anom_melt = phq_anomalies_qc.melt(
-        id_vars=['subject_id', 'start', 'phq_change'] + parameter_cols,
+        id_vars=['subject_id', 'start', 'phq_change', 'phq_stop', 'phq_start'] + parameter_cols,
         value_vars=anomaly_detector_cols,
         value_name='anomalies',
         var_name='detector'
@@ -264,36 +264,39 @@ if __name__ == '__main__':
         'period',
         'window_size',
     ]
-    outcome_col = 'phq_change'
-    corr = anomaly_detection.correlateDetectedToOutcome(
-        phq_anomalies_qc,
-        anomaly_detector_cols,
-        outcome_col=outcome_col,
-        groupby_cols=info_cols,
-    )
-    corr_table = corr.pivot_table(
-        index=['detector'],
-        columns=['window_size', 'period'],
-        values='rho',
-        aggfunc='median'
-    )
-    hm_size = (10, 7)
-    fig, ax = plt.subplots(figsize=hm_size)
-    sns.heatmap(
-        corr_table,
-        center=0,
-        vmin=-1,
-        vmax=1,
-        square=True,
-        annot=True,
-        cmap='coolwarm',
-        ax=ax
-    )
-    fname = Path(out_dir, 'spearmanr_heatmap.png')
-    fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
-    plt.tight_layout()
-    plt.gcf().savefig(str(fname))
-    plt.close()
+    for target in ['phq_change', 'phq_stop', 'phq_start']:
+        corr = anomaly_detection.correlateDetectedToOutcome(
+            phq_anomalies_qc,
+            anomaly_detector_cols,
+            outcome_col=target,
+            groupby_cols=info_cols,
+        )
+        corr['r2'] = corr['rho'] ** 2
+        for metric in ['rho', 'r2']:
+            corr_table = corr.pivot_table(
+                index=['detector'],
+                columns=['window_size', 'period'],
+                values='rho',
+                aggfunc='median'
+            )
+            hm_size = (10, 7)
+            fig, ax = plt.subplots(figsize=hm_size)
+            sns.heatmap(
+                corr_table,
+                center=0,
+                vmin=-1,
+                vmax=1,
+                square=True,
+                annot=True,
+                cmap='coolwarm',
+                ax=ax
+            )
+            fname = Path(out_dir, f'spearmanr_{metric}_{target}_heatmap.png')
+            fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
+            plt.tight_layout()
+            plt.gcf().savefig(str(fname))
+            plt.close()
+
 
     stop = time.perf_counter()
     print(f"\nCompleted in {stop - start:0.2f} seconds")

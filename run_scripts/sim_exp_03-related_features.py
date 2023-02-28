@@ -105,12 +105,27 @@ def run_ad_on_simulated(
             features=features,
             window_size=window_size,
             max_missing_days=0,
-            n_components=n_components
-        )
+            n_components=n_components,
+            kernel='poly'
+        ),
+        anomaly_detection.SVMRollingAnomalyDetector(
+            features=features,
+            window_size=window_size,
+            max_missing_days=0,
+            n_components=n_components,
+            kernel='sigmoid'
+        ),
+        anomaly_detection.SVMRollingAnomalyDetector(
+            features=features,
+            window_size=window_size,
+            max_missing_days=0,
+            n_components=n_components,
+            kernel='rbf'
+        ),
     ]
     for detector in detectors:
         # Remove # of components from name
-        dname = detector.name.split('_')[0]
+        dname = detector.name
         data[f'{dname}_anomaly'] = np.nan
         for sid in data.subject_id.unique():
             subject_data = data.loc[data.subject_id == sid]
@@ -192,13 +207,19 @@ if __name__ == '__main__':
 
     # Calculate correlation of # anomalies model detects to # induced
     print('\tSpearman R - detected vs induced anomalies')
-    correlation_df = anomaly_detection\
-        .correlate_detected_to_induced(
+    corr = anomaly_detection\
+        .correlateDetectedToInduced(
             data=data_df,
             anomaly_detector_cols=anomaly_detector_cols,
             groupby_cols=groupby_cols,
-            corr_across=[KEY_DIFFERENCE, 'window_size'],
-        )
+            corr_across=[KEY_DIFFERENCE, 'window_size']
+    )
+    corr_table = corr.pivot_table(
+        index=['detector'],
+        columns=['window_size', KEY_DIFFERENCE],
+        values='rho',
+        aggfunc='median'
+    )
 
 
     # Calculate # of day difference between anomaly induced and closest detected anomaly
@@ -227,15 +248,7 @@ if __name__ == '__main__':
     hm_size = (10, 7)
     fig, ax = plt.subplots(figsize=hm_size)
     sns.heatmap(
-        correlation_df.melt(
-            id_vars=[KEY_DIFFERENCE, 'window_size'],
-            var_name='model',
-            value_name='spearmanr'
-        ).pivot_table(
-            columns='window_size',
-            index=['model', KEY_DIFFERENCE],
-            values='spearmanr',
-        ),
+        corr_table,
         center=0,
         vmin=-1,
         vmax=1,
@@ -245,13 +258,13 @@ if __name__ == '__main__':
         ax=ax
     )
     fname = Path(out_dir, f'spearmanr_heatmap_n{N_SUBJECTS}.png')
-    fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
+    fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=12, x_rotation=90)
     plt.tight_layout()
     plt.gcf().savefig(str(fname))
     plt.close()
 
     # Plot performance metrics per condition
-    for metric in ['accuracy', 'sensitivity', 'specificity']:
+    for metric in ['accuracy', 'sensitivity', 'specificity', 'F1']:
         fig, ax = plt.subplots(figsize=hm_size)
         sns.heatmap(
             performance_df.pivot_table(
@@ -292,7 +305,7 @@ if __name__ == '__main__':
         plt.gcf().savefig(str(fname))
         plt.close()
 
-    print(performance_df.groupby('model').accuracy.describe().round(2))
+    print(performance_df.groupby('model').F1.describe().round(2))
 
     # TODO: calculate how many induced anomalies were missed [no detected anomaly before next anomaly]
     # TODO: calculate how many detected anomalies were before the first induced

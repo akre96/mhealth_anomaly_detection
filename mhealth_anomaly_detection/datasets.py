@@ -319,9 +319,9 @@ class GLOBEM(DatasetBase):
         
         phq = data[['subject_id', 'study_day', 'phq4']]\
                 .dropna()\
-                .reset_index(drop=True)\
                 .sort_values(by=['subject_id', 'study_day'])\
-                .drop_duplicates()
+                .drop_duplicates()\
+                .reset_index(drop=True)
 
         results_dict = {
             'subject_id': [],

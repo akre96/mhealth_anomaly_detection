@@ -10,6 +10,7 @@ predicting anomalous days
 """
 import time
 import pandas as pd
+from tqdm.auto import tqdm
 import numpy as np
 from p_tqdm import p_map
 from pathlib import Path
@@ -22,13 +23,15 @@ from mhealth_anomaly_detection import format_axis as fa
 
 EXPERIMENT = 'exp02'
 USE_CACHE = True
+PARALLEL = True
+NUM_CPUS = 6
 
 # Dataset parameters
 N_SUBJECTS = 100
 DAYS_OF_DATA = 90
 FREQUENCIES = [2, 7, 14, 28]
 WINDOW_SIZES = [7, 14, 28] # Can likely reduce to 2
-N_FEATURES_LIST = [5, 10, 25, 100]
+N_FEATURES_LIST = [5, 10, 25, 100, 200]
 KEY_DIFFERENCE = 'n_features'
 
 def run_ad_on_simulated(
@@ -157,15 +160,23 @@ if __name__ == '__main__':
         def expand_args_run(arg):
             return run_ad_on_simulated(**arg)
 
-        # Run parameters
-        datasets = p_map(expand_args_run, run_list)
-
-#        for i, run_params in tqdm(enumerate(run_list)):
-#            if i < 5:
-#                continue
-#            datasets.append(
-#                run_ad_on_simulated(**run_params)
-#            )
+        # Run parameters - simulation + anomaly detection
+        if PARALLEL:
+            # Parallel process
+            datasets = p_map(
+                expand_args_run,
+                run_list,
+                num_cpus=NUM_CPUS
+            )
+        else:
+            # Don't parallel process
+            datasets = []
+            for i, run_params in tqdm(enumerate(run_list)):
+                if i < 2:
+                    continue
+                datasets.append(
+                    run_ad_on_simulated(**run_params)
+                )
 
         data_df = pd.concat(datasets)
         data_df.to_csv(fpath, index=False)
@@ -233,7 +244,7 @@ if __name__ == '__main__':
     plt.close()
 
     # Plot performance metrics per condition
-    for metric in ['accuracy', 'sensitivity', 'specificity']:
+    for metric in ['accuracy', 'sensitivity', 'specificity', 'F1']:
         fig, ax = plt.subplots(figsize=hm_size)
         sns.heatmap(
             performance_df.pivot_table(

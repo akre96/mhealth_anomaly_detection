@@ -9,8 +9,18 @@
         "Random Forest Classifier": "#192a56",
         "Gradient Boosting Classifier": "#487eb0",
         "PCA": "#44AA99",
+        "PCA_003": "#44AA99",
+        "PCA_005": "#44AA99",
+        "PCA_010": "#44AA99",
         "NMF": "#117733",
+        "NMF_003": "#117733",
+        "NMF_005": "#117733",
+        "NMF_010": "#117733",
         "SVM": "#EE99AA",
+        "SVM_rbf": "#EE99AA",
+        "SVM_poly": "#994455",
+        "SVM_sigmoid": "#882255",
+        "IsolationForest": "#DDCC77",
         "RollingMean": "#88CCEE"
     },
     "features": {
