@@ -44,8 +44,8 @@ def lineplot_features(
         else:
             color = palette['features'][f]
         
-        data[f] = pd.to_numeric(data[f], errors='coerce')
-        data[time_col] = pd.to_numeric(data[time_col], errors='coerce')
+        data.loc[f] = pd.to_numeric(data[f], errors='coerce')
+        data.loc[time_col] = pd.to_numeric(data[time_col], errors='coerce')
         kwargs = {
             'x': data.dropna(subset=[f])[time_col].astype(float),
             'y': data.dropna(subset=[f])[f].astype(float),

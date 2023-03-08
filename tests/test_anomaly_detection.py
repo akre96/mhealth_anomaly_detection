@@ -108,8 +108,8 @@ def test_performance_metrics_perfect():
     ]])
 
     # columns:
-    #   Groupby col, sens, spec, accuracy, TN, TP, FN, FP
-    assert metrics.shape == (1, 6 + N_FEATURES)
+    #   Groupby col, sens, spec, accuracy, TN, TP, FN, FP, F1, Recall
+    assert metrics.shape == (1, 8 + N_FEATURES)
 
     assert metrics.true_positives.sum() == N_DAYS
     assert metrics.true_negatives.sum() == 0
@@ -199,7 +199,7 @@ def test_performance_metrics_mid():
 
     # columns:
     #   Groupby col, sens, spec, accuracy, TN, TP, FN, FP
-    assert metrics.shape == (1, 6 + N_FEATURES)
+    assert metrics.shape == (1, 8 + N_FEATURES)
 
     assert metrics.true_positives.sum() == 5
     assert metrics.true_negatives.sum() == 0
@@ -344,7 +344,7 @@ def test_perfect_correlation():
     data = pd.concat(datasets)
     data['study'] = 'test_study'
 
-    correlation_df = ad.correlate_detected_to_induced(
+    correlation_df = ad.correlateDetectedToInduced(
         data=data,
         anomaly_detector_cols=['model_anomaly'],
         groupby_cols=['study', 'subject_id', 'setting'],

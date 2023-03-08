@@ -8,6 +8,11 @@ sleep data exclusively.
 Output: heatmap of correlation of PHQ-4 change to detected
 anomalies. 
 """
+import sys
+# Make imports work
+# TODO: Remove this dependency -- worked fine when using poetry, but not just python3
+sys.path.insert(0, '/Users/sakre/Code/dgc/mhealth_anomaly_detection')
+
 import time
 import pandas as pd
 import numpy as np
@@ -32,19 +37,19 @@ from mhealth_anomaly_detection import format_axis as fa
 DEBUG = False
 
 PARALLEL = True
-USE_CACHE = True
+USE_CACHE = False
 USE_CACHE_INTERMEDIATE = False
 
 # Ignore divide by 0 error -> expected and happens in PCA
 np.seterr(divide='ignore', invalid='ignore')
 
 # Meta params
-NUM_CPUS = 6
+NUM_CPUS = 10
 MAX_MISSING_DAYS = 2
 EXPERIMENT = 'exp06'
 
 # Dataset Parameters
-YEAR = 2
+YEAR = 3
 SENSOR_TYPES = ['sleep', 'steps', 'location', 'call']
 FEATURES = [
     'f_loc:phone_locations_doryab_locationentropy:allday',
@@ -105,7 +110,7 @@ if __name__ == '__main__':
         phq_anomalies = pd.read_csv(fpath)
 
     else:
-        print("\nLoading GLOBEM year 2 dataset...")
+        print(f"\nLoading GLOBEM year {YEAR} dataset...")
         dataset = datasets.GLOBEM(
             data_path='~/Data/mHealth_external_datasets/GLOBEM',
             year=YEAR,
@@ -252,7 +257,7 @@ if __name__ == '__main__':
         var_name='detector'
     )
 
-    out_dir = Path('output', EXPERIMENT)
+    out_dir = Path('output', f'GLOBEM_year-{YEAR}', EXPERIMENT)
     if DEBUG:
         out_dir = Path('output', 'debug', EXPERIMENT)
     print(f'\nPlotting to {out_dir}...')

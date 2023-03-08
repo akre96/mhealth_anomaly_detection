@@ -27,9 +27,9 @@ PARALLEL = True
 
 # Dataset parameters
 N_SUBJECTS = 100
-DAYS_OF_DATA = 90
-FREQUENCIES = [2, 7, 14, 28]
-WINDOW_SIZES = [7, 14, 28] 
+DAYS_OF_DATA = 120
+FREQUENCIES = [28]
+WINDOW_SIZES = [14] 
 N_FEATURES = 24
 N_CORR = 2
 CORRELATION_LIST = ['Independent', 'Linear', 'Non-linear']

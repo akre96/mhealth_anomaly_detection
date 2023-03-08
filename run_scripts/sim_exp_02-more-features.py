@@ -28,9 +28,9 @@ NUM_CPUS = 6
 
 # Dataset parameters
 N_SUBJECTS = 100
-DAYS_OF_DATA = 90
-FREQUENCIES = [2, 7, 14, 28]
-WINDOW_SIZES = [7, 14, 28] # Can likely reduce to 2
+DAYS_OF_DATA = 120
+FREQUENCIES = [28]
+WINDOW_SIZES = [14] # Can likely reduce to 2
 N_FEATURES_LIST = [5, 10, 25, 100, 200]
 KEY_DIFFERENCE = 'n_features'
 
@@ -188,33 +188,10 @@ if __name__ == '__main__':
     # PERFORMANCE CALCULATIONS
     print('Calculating Metrics...')
 
-    # Calculate correlation of # anomalies model detects to # induced
-    print('\tSpearman R - detected vs induced anomalies')
-    corr = anomaly_detection\
-        .correlateDetectedToInduced(
-            data=data_df,
-            anomaly_detector_cols=anomaly_detector_cols,
-            groupby_cols=groupby_cols,
-            corr_across=[KEY_DIFFERENCE, 'window_size']
-    )
-    corr_table = corr.pivot_table(
-        index=['detector'],
-        columns=['window_size', KEY_DIFFERENCE],
-        values='rho',
-        aggfunc='median'
-    )
 
 
-    # Calculate # of day difference between anomaly induced and closest detected anomaly
-    print('\tDistance of anomalies to detected anomaly')
-    anomaly_detector_behavior = anomaly_detection\
-        .distance_real_to_detected_anomaly(
-            data=data_df,
-            anomaly_detector_cols=anomaly_detector_cols,
-            groupby_cols=groupby_cols
-        )
-    # Calculate accuracy, sensitivity, specificity
-    print('\tAccuracy, sensitivity, specificity')
+    # Calculate F1, sensitivity, specificity
+    print('\tF1, sensitivity, specificity')
     performance_df = anomaly_detection.performance_metrics(
         data=data_df,
         groupby_cols=groupby_cols,
@@ -224,24 +201,7 @@ if __name__ == '__main__':
     # PLOTTING
     print('Plotting...')
 
-    # Plot correlation of # detected anomalies per subject/anomaly frequency
     hm_size = (10, 7)
-    fig, ax = plt.subplots(figsize=hm_size)
-    sns.heatmap(
-        corr_table,
-        center=0,
-        vmin=-1,
-        vmax=1,
-        square=True,
-        annot=True,
-        cmap='coolwarm',
-        ax=ax
-    )
-    fname = Path('output', EXPERIMENT, f'spearmanr_heatmap_n{N_SUBJECTS}.png')
-    fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=12, x_rotation=90)
-    plt.tight_layout()
-    plt.gcf().savefig(str(fname))
-    plt.close()
 
     # Plot performance metrics per condition
     for metric in ['accuracy', 'sensitivity', 'specificity', 'F1']:
@@ -249,8 +209,8 @@ if __name__ == '__main__':
         sns.heatmap(
             performance_df.pivot_table(
                 values=metric,
-                columns=['anomaly_freq', 'window_size'],
-                index=[KEY_DIFFERENCE, 'model'],
+                columns=[KEY_DIFFERENCE],
+                index=['model'],
             ).round(2),
             annot=True,
             square=True,
@@ -264,28 +224,7 @@ if __name__ == '__main__':
         plt.gcf().savefig(str(fname))
         plt.close()
 
-    # Plot mean/median distance per condition
-    for metric in ['mean', 'median']:
-        fig, ax = plt.subplots(figsize=hm_size)
-        sns.heatmap(
-            anomaly_detector_behavior.pivot_table(
-                values='distance',
-                columns=['anomaly_freq', 'window_size'],
-                index=[KEY_DIFFERENCE, 'model'],
-                aggfunc=metric,
-            ),
-            annot=True,
-            square=True,
-            vmin=0,
-            ax=ax
-        )
-        fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
-        fname = Path('output', EXPERIMENT, f'distance_{metric}_heatmap_n{N_SUBJECTS}.png')
-        plt.tight_layout()
-        plt.gcf().savefig(str(fname))
-        plt.close()
-
-    print(performance_df.groupby('model').accuracy.describe().round(2))
+    print(performance_df.groupby('model').F1.describe().round(2))
 
     # TODO: calculate how many induced anomalies were missed [no detected anomaly before next anomaly]
     # TODO: calculate how many detected anomalies were before the first induced

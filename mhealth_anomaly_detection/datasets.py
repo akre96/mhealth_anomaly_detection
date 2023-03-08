@@ -153,6 +153,42 @@ class GLOBEM(DatasetBase):
 
         return data
 
+    def get_pre_post_surveys(self) -> pd.DataFrame:
+        pre_path = Path(
+            self.data_path,
+            f'INS-W_{self.year}',
+            'SurveyData',
+            'pre.csv'
+        )
+
+        pre = pd.read_csv(
+            pre_path,
+            index_col=0
+        ).rename(columns={'date': 'pre_date'})
+        pre_col_names = [c.removesuffix('_PRE') for c in pre.columns]
+
+        post_path = Path(
+            self.data_path,
+            f'INS-W_{self.year}',
+            'SurveyData',
+            'post.csv'
+        )
+
+        post = pd.read_csv(
+            post_path,
+            index_col=0
+        ).rename(columns={'date': 'post_date'})
+        post_col_names = [c.removesuffix('_POST') for c in post.columns]
+
+
+        prepost = pre.merge(post, how='inner', on='pid').rename(columns={'pid': 'subject_id'})
+        for col in pre_col_names:
+            if col in post_col_names and col not in ['pid', 'pre_date', 'post_date']:
+                prepost[f'{col}_CHANGE'] = prepost[f'{col}_POST'] - prepost[f'{col}_PRE']
+
+        return prepost
+
+
     def get_weekly_phq4(self) -> pd.DataFrame:
         weekly_survey_path = Path(
             self.data_path,
@@ -283,6 +319,18 @@ class GLOBEM(DatasetBase):
                 'INS-W_569',
                 'INS-W_570',
             ]
+        elif self.year == 3:
+            remove_participants = [
+                "INS-W_601",
+                "INS-W_606",
+                "INS-W_637",
+                "INS-W_642",
+                "INS-W_653",
+                "INS-W_679",
+                "INS-W_681",
+                "INS-W_737",
+                "INS-W_756",
+            ]
         else:
             print('Warning: Filtering participants not established for year 1,3,4')
 
@@ -340,6 +388,8 @@ class GLOBEM(DatasetBase):
         for i, row in tqdm(phq.iterrows()):
             last_row = phq.iloc[i-period]
             if last_row['subject_id'] != row['subject_id']:
+                continue
+            if last_row['study_day'] > row['study_day']:
                 continue
 
             anomalies = data.loc[
