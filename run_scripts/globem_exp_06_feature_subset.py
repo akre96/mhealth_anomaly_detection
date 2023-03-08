@@ -9,9 +9,10 @@ Output: heatmap of correlation of PHQ-4 change to detected
 anomalies. 
 """
 import sys
+
 # Make imports work
 # TODO: Remove this dependency -- worked fine when using poetry, but not just python3
-sys.path.insert(0, '/Users/sakre/Code/dgc/mhealth_anomaly_detection')
+sys.path.insert(0, "/Users/sakre/Code/dgc/mhealth_anomaly_detection")
 
 import time
 import pandas as pd
@@ -25,6 +26,7 @@ import matplotlib.pyplot as plt
 
 # explicitly require this experimental feature
 from sklearn.experimental import enable_iterative_imputer  # noqa
+
 # now you can import normally from sklearn.impute
 from sklearn.impute import IterativeImputer
 
@@ -41,33 +43,33 @@ USE_CACHE = False
 USE_CACHE_INTERMEDIATE = False
 
 # Ignore divide by 0 error -> expected and happens in PCA
-np.seterr(divide='ignore', invalid='ignore')
+np.seterr(divide="ignore", invalid="ignore")
 
 # Meta params
 NUM_CPUS = 10
 MAX_MISSING_DAYS = 2
-EXPERIMENT = 'exp06'
+EXPERIMENT = "exp06"
 
 # Dataset Parameters
 YEAR = 3
-SENSOR_TYPES = ['sleep', 'steps', 'location', 'call']
+SENSOR_TYPES = ["sleep", "steps", "location", "call"]
 FEATURES = [
-    'f_loc:phone_locations_doryab_locationentropy:allday',
-    'f_loc:phone_locations_barnett_circdnrtn:allday',
-    'f_steps:fitbit_steps_intraday_rapids_sumsteps:allday',
-    'f_steps:fitbit_steps_intraday_rapids_sumdurationactivebout:allday',
-    'f_slp:fitbit_sleep_intraday_rapids_sumdurationasleepunifiedmain:allday',
-    'f_slp:fitbit_sleep_intraday_rapids_countepisodeasleepunifiedmain:allday',
-    'f_slp:fitbit_sleep_summary_rapids_firstbedtimemain:allday',
-    'f_slp:fitbit_sleep_summary_rapids_avgefficiencymain:allday',
-    'f_call:phone_calls_rapids_missed_count:allday',
-    'f_call:phone_calls_rapids_incoming_count:allday',
-    'f_call:phone_calls_rapids_outgoing_count:allday',
-    'f_call:phone_calls_rapids_outgoing_sumduration:allday',
-    'sleep_missing',
-    'steps_missing',
-    'location_missing',
-    'call_missing',
+    "f_loc:phone_locations_doryab_locationentropy:allday",
+    "f_loc:phone_locations_barnett_circdnrtn:allday",
+    "f_steps:fitbit_steps_intraday_rapids_sumsteps:allday",
+    "f_steps:fitbit_steps_intraday_rapids_sumdurationactivebout:allday",
+    "f_slp:fitbit_sleep_intraday_rapids_sumdurationasleepunifiedmain:allday",
+    "f_slp:fitbit_sleep_intraday_rapids_countepisodeasleepunifiedmain:allday",
+    "f_slp:fitbit_sleep_summary_rapids_firstbedtimemain:allday",
+    "f_slp:fitbit_sleep_summary_rapids_avgefficiencymain:allday",
+    "f_call:phone_calls_rapids_missed_count:allday",
+    "f_call:phone_calls_rapids_incoming_count:allday",
+    "f_call:phone_calls_rapids_outgoing_count:allday",
+    "f_call:phone_calls_rapids_outgoing_sumduration:allday",
+    "sleep_missing",
+    "steps_missing",
+    "location_missing",
+    "call_missing",
 ]
 MIN_DAYS = 7
 
@@ -75,44 +77,44 @@ MIN_DAYS = 7
 WINDOW_SIZES = [7, 14, 28]
 ANOMALY_PERIODS = [1, 2, 3]
 N_COMPONENTS = [3, 5, 10]
-KERNELS = ['poly', 'rbf', 'sigmoid']
+KERNELS = ["poly", "rbf", "sigmoid"]
 
 # Debugging
 if DEBUG:
-    WINDOW_SIZES = [7, 14] 
+    WINDOW_SIZES = [7, 14]
     ANOMALY_PERIODS = [2]
     N_COMPONENTS = [3]
-    KERNELS = ['poly']
-    USE_CACHE = False 
+    KERNELS = ["poly"]
+    USE_CACHE = False
     USE_CACHE_INTERMEDIATE = False
 
 N_PARAMS = max([len(N_COMPONENTS), len(KERNELS)])
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     start = time.perf_counter()
 
     # File name for the simulated dataset with anomaly detection run
-    folder = Path('cache')
+    folder = Path("cache")
     if DEBUG:
-        folder = Path('cache', 'debug')
+        folder = Path("cache", "debug")
         if not folder.exists():
             folder.mkdir()
 
-    fname = f'GLOBEM-{YEAR}_{EXPERIMENT}.csv'
+    fname = f"GLOBEM-{YEAR}_{EXPERIMENT}.csv"
     fpath = Path(folder, fname)
 
-    inter_fname = f'GLOBEM-{YEAR}_{EXPERIMENT}_intermediate.csv'
+    inter_fname = f"GLOBEM-{YEAR}_{EXPERIMENT}_intermediate.csv"
     inter_fpath = Path(folder, inter_fname)
 
     # If data is cached, do not run anomaly detection only results generation
     if USE_CACHE and fpath.exists():
-        print('\tUsing cached data from: ', fpath)
+        print("\tUsing cached data from: ", fpath)
         phq_anomalies = pd.read_csv(fpath)
 
     else:
         print(f"\nLoading GLOBEM year {YEAR} dataset...")
         dataset = datasets.GLOBEM(
-            data_path='~/Data/mHealth_external_datasets/GLOBEM',
+            data_path="~/Data/mHealth_external_datasets/GLOBEM",
             year=YEAR,
             sensor_data_types=SENSOR_TYPES,
         )
@@ -126,17 +128,11 @@ if __name__ == '__main__':
             ## Impute data
             print("\nImputing dataset")
             imputer = IterativeImputer(
-                initial_strategy='median',
-                keep_empty_features=True,
-                skip_complete=True
+                initial_strategy="median", keep_empty_features=True, skip_complete=True
             )
 
             imputed = impute.rollingImpute(
-                data,
-                features,
-                MIN_DAYS,
-                imputer,
-                num_cpus=NUM_CPUS
+                data, features, MIN_DAYS, imputer, num_cpus=NUM_CPUS
             )
             anomalies_detected_list = []
             print("\nRunning anomaly detection in different conditions...")
@@ -145,20 +141,22 @@ if __name__ == '__main__':
                 # Initiate Anomaly Detectors
                 detectors = []
                 base_detector = anomaly_detection.BaseRollingAnomalyDetector(
-                        features=features,
-                        window_size=window_size,
-                        max_missing_days=MAX_MISSING_DAYS,
-                    )
+                    features=features,
+                    window_size=window_size,
+                    max_missing_days=MAX_MISSING_DAYS,
+                )
                 if i_param == 0:
                     detectors.append(base_detector)
 
-                if i_param < len(N_COMPONENTS) and (N_COMPONENTS[i_param] < window_size):
+                if i_param < len(N_COMPONENTS) and (
+                    N_COMPONENTS[i_param] < window_size
+                ):
                     detectors.append(
                         anomaly_detection.PCARollingAnomalyDetector(
                             features=features,
                             window_size=window_size,
                             max_missing_days=MAX_MISSING_DAYS,
-                            n_components=N_COMPONENTS[i_param]
+                            n_components=N_COMPONENTS[i_param],
                         )
                     )
                     detectors.append(
@@ -166,7 +164,7 @@ if __name__ == '__main__':
                             features=features,
                             window_size=window_size,
                             max_missing_days=MAX_MISSING_DAYS,
-                            n_components=N_COMPONENTS[i_param]
+                            n_components=N_COMPONENTS[i_param],
                         )
                     )
                 if i_param < len(KERNELS):
@@ -176,44 +174,43 @@ if __name__ == '__main__':
                             window_size=window_size,
                             max_missing_days=MAX_MISSING_DAYS,
                             kernel=KERNELS[i_param],
-                            n_components=5
+                            n_components=5,
                         )
                     )
                 if len(detectors) == 0:
                     continue
                 dnames = [d.name for d in detectors]
-                print(f'\t {i+1} of {len(conditions)}: window_size: {window_size}, {dnames}')
+                print(
+                    f"\t {i+1} of {len(conditions)}: window_size: {window_size}, {dnames}"
+                )
 
                 # Detect anomalies
                 def detectAnomalies(grouped) -> pd.DataFrame:
-                    index_cols = [
-                        'subject_id',
-                        'study_day',
-                        'window_size'
-                    ]
+                    index_cols = ["subject_id", "study_day", "window_size"]
                     _, subject_data = grouped
                     for detector in detectors:
                         dname = detector.name
                         if i_param > 0:
-                            if dname in ['RollingMean']:
+                            if dname in ["RollingMean"]:
                                 continue
-                        subject_data[f'{dname}_anomaly'] = np.nan
-                        subject_data[f'{dname}_anomaly'] = detector\
-                            .labelAnomaly(subject_data)
-                    subject_data['window_size'] = window_size
+                        subject_data[f"{dname}_anomaly"] = np.nan
+                        subject_data[f"{dname}_anomaly"] = detector.labelAnomaly(
+                            subject_data
+                        )
+                    subject_data["window_size"] = window_size
                     return subject_data.set_index(index_cols)
 
                 if PARALLEL:
                     ad = pd.concat(
                         p_map(
                             detectAnomalies,
-                            imputed.groupby('subject_id'),
-                            num_cpus=NUM_CPUS
+                            imputed.groupby("subject_id"),
+                            num_cpus=NUM_CPUS,
                         )
                     )
                 else:
                     ad = []
-                    for s in imputed.groupby('subject_id'):
+                    for s in imputed.groupby("subject_id"):
                         print(s[0])
                         ad.append(detectAnomalies(s))
                     ad = pd.concat(ad)
@@ -226,63 +223,59 @@ if __name__ == '__main__':
         phq_anomalies_list = []
         print("\n\tCounting anomalies between phq periods")
         for period in ANOMALY_PERIODS:
-            for (window_size), ad_df in anomalies_detected.groupby(
-                ['window_size']
-            ):
-
+            for (window_size), ad_df in anomalies_detected.groupby(["window_size"]):
                 phq_anomalies = dataset.get_phq_periods(
                     ad_df,
                     features,
                     period,
                 )
-                phq_anomalies['window_size'] = window_size
+                phq_anomalies["window_size"] = window_size
                 phq_anomalies_list.append(phq_anomalies)
 
-        print('\n\tSaving results to', fpath)
+        print("\n\tSaving results to", fpath)
         pd.concat(phq_anomalies_list).to_csv(fpath, index=False)
 
     phq_anomalies = pd.read_csv(fpath)
     # QC
-    phq_anomalies_qc = phq_anomalies[phq_anomalies.days >= phq_anomalies.period*6]
-    print('\tOnly keeping periods that have at least 6 days per week')
-    print(f'\t\t from {phq_anomalies.shape[0]} to {phq_anomalies_qc.shape[0]}')
-    parameter_cols = ['window_size', 'period']
-    anomaly_detector_cols = [
-        d for d in phq_anomalies.columns if d.endswith("_anomaly")
-    ]
+    phq_anomalies_qc = phq_anomalies[phq_anomalies.days >= phq_anomalies.period * 6]
+    print("\tOnly keeping periods that have at least 6 days per week")
+    print(f"\t\t from {phq_anomalies.shape[0]} to {phq_anomalies_qc.shape[0]}")
+    parameter_cols = ["window_size", "period"]
+    anomaly_detector_cols = [d for d in phq_anomalies.columns if d.endswith("_anomaly")]
     phq_anom_melt = phq_anomalies_qc.melt(
-        id_vars=['subject_id', 'start', 'phq_change', 'phq_stop', 'phq_start'] + parameter_cols,
+        id_vars=["subject_id", "start", "phq_change", "phq_stop", "phq_start"]
+        + parameter_cols,
         value_vars=anomaly_detector_cols,
-        value_name='anomalies',
-        var_name='detector'
+        value_name="anomalies",
+        var_name="detector",
     )
 
-    out_dir = Path('output', f'GLOBEM_year-{YEAR}', EXPERIMENT)
+    out_dir = Path("output", f"GLOBEM_year-{YEAR}", EXPERIMENT)
     if DEBUG:
-        out_dir = Path('output', 'debug', EXPERIMENT)
-    print(f'\nPlotting to {out_dir}...')
+        out_dir = Path("output", "debug", EXPERIMENT)
+    print(f"\nPlotting to {out_dir}...")
     if not out_dir.exists():
         out_dir.mkdir(parents=True)
-    
+
     # Plot influence of window size on anomalies changed
     info_cols = [
-        'period',
-        'window_size',
+        "period",
+        "window_size",
     ]
-    for target in ['phq_change', 'phq_stop', 'phq_start']:
+    for target in ["phq_change", "phq_stop", "phq_start"]:
         corr = anomaly_detection.correlateDetectedToOutcome(
             phq_anomalies_qc,
             anomaly_detector_cols,
             outcome_col=target,
             groupby_cols=info_cols,
         )
-        corr['r2'] = corr['rho'] ** 2
-        for metric in ['rho', 'r2']:
+        corr["r2"] = corr["rho"] ** 2
+        for metric in ["rho", "r2"]:
             corr_table = corr.pivot_table(
-                index=['detector'],
-                columns=['window_size', 'period'],
-                values='rho',
-                aggfunc='median'
+                index=["detector"],
+                columns=["window_size", "period"],
+                values="rho",
+                aggfunc="median",
             )
             hm_size = (10, 7)
             fig, ax = plt.subplots(figsize=hm_size)
@@ -293,16 +286,14 @@ if __name__ == '__main__':
                 vmax=1,
                 square=True,
                 annot=True,
-                cmap='coolwarm',
-                ax=ax
+                cmap="coolwarm",
+                ax=ax,
             )
-            fname = Path(out_dir, f'spearmanr_{metric}_{target}_heatmap.png')
+            fname = Path(out_dir, f"spearmanr_{metric}_{target}_heatmap.png")
             fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
             plt.tight_layout()
             plt.gcf().savefig(str(fname))
             plt.close()
 
-
     stop = time.perf_counter()
     print(f"\nCompleted in {stop - start:0.2f} seconds")
-

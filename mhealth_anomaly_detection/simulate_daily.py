@@ -7,14 +7,14 @@ import json
 
 
 class BaseDailyDataSimulator:
-    """ Base class for daily data simulation
-    """
+    """Base class for daily data simulation"""
+
     def __init__(
         self,
         feature_params: Dict[str, Dict],
         n_days: int = 60,
         n_subjects: int = 2,
-        sim_type: str = 'base',
+        sim_type: str = "base",
         cache_simulation: bool = True,
     ):
         self.feature_params = feature_params
@@ -44,11 +44,9 @@ class BaseDailyDataSimulator:
         data_added = data.copy()
         for feature, params in self.feature_params.items():
             for i in range(n_feats):
-                f_name = f'{feature}_corr_{i}'
+                f_name = f"{feature}_corr_{i}"
                 f_noise = np.random.normal(
-                    0,
-                    params['mean']*noise_scale,
-                    data.shape[0]
+                    0, params["mean"] * noise_scale, data.shape[0]
                 )
                 data_added[f_name] = data[feature] + f_noise
                 self.added_features.append(f_name)
@@ -62,11 +60,10 @@ class BaseDailyDataSimulator:
         data_added = data.copy()
         for feature, params in self.feature_params.items():
             for i in range(n_feats):
-                f_name = f'{feature}_relu_{i}'
-                data_added[f_name] = data[feature] * (data[feature] > params['mean'])
+                f_name = f"{feature}_relu_{i}"
+                data_added[f_name] = data[feature] * (data[feature] > params["mean"])
                 self.added_features.append(f_name)
         return data_added
-
 
     @staticmethod
     def genDailyFeature(
@@ -76,7 +73,7 @@ class BaseDailyDataSimulator:
         min: float = 0,
         init_value: float = None,
     ) -> float:
-        """ Generate daily feature from historical data.
+        """Generate daily feature from historical data.
 
         Args:
             history (np.array): historical values, NaNs ignored
@@ -97,14 +94,14 @@ class BaseDailyDataSimulator:
         elif init_value is not None:
             loc = init_value
         else:
-            raise ValueError('Initial value or historical values must be set')
+            raise ValueError("Initial value or historical values must be set")
 
         # Generate next days feature value from random normal distribution
         next_val = np.random.normal(
             loc=loc,
             scale=std,
         )
-        
+
         # Limit boundary of feature
         if next_val > max:
             return max
@@ -114,7 +111,7 @@ class BaseDailyDataSimulator:
         return next_val
 
     def calcSadEMA(self, subject_data: pd.DataFrame):
-        """ Calculates daily sad mood from daily features
+        """Calculates daily sad mood from daily features
 
         Args:
             subject_data (pd.DataFrame): daily data
@@ -125,17 +122,15 @@ class BaseDailyDataSimulator:
         feature_df = subject_data[list(self.feature_params.keys())]
 
         # Set features all between 0 and 1
-        norm_features = (feature_df - feature_df.min()) /\
-            (feature_df.max() - feature_df.min())
+        norm_features = (feature_df - feature_df.min()) / (
+            feature_df.max() - feature_df.min()
+        )
 
         # Each feature weighted equally for depressed mood
         sad_ema = norm_features[list(self.feature_params.keys())].sum(axis=1)
 
         # daily depressed mood is a simple summation scaled between 0 and 3
-        sad_ema = 3 * (
-            (sad_ema - sad_ema.min()) /
-            (sad_ema.max() - sad_ema.min())
-        )
+        sad_ema = 3 * ((sad_ema - sad_ema.min()) / (sad_ema.max() - sad_ema.min()))
         sad_ema[sad_ema > 3] = 3
         sad_ema = np.round(sad_ema)
         return sad_ema
@@ -145,7 +140,7 @@ class BaseDailyDataSimulator:
         subject_id: str,
         random_seed: int = 0,
     ) -> pd.DataFrame:
-        """ Generate daily features for 1 subject
+        """Generate daily features for 1 subject
 
         Args:
             subject_id (str): name for subject_id column
@@ -156,34 +151,39 @@ class BaseDailyDataSimulator:
         """
         np.random.seed(random_seed)
         data_dict = {
-            'subject_id': [subject_id] * self.n_days,
-            'study_day': range(self.n_days),
+            "subject_id": [subject_id] * self.n_days,
+            "study_day": range(self.n_days),
         }
         for feature, params in self.feature_params.items():
             f_data = np.full((self.n_days), np.nan)
             for i in range(self.n_days):
                 if i == 0:
-                    history = [params['mean']]
+                    history = [params["mean"]]
                 else:
-                    history = f_data[i-1:(i+params['history_len']-1)]
+                    history = f_data[i - 1 : (i + params["history_len"] - 1)]
                 f_data[i] = self.genDailyFeature(
                     history=history,
-                    std=params['std'],
-                    max=params['max'],
-                    min=params['min'],
+                    std=params["std"],
+                    max=params["max"],
+                    min=params["min"],
                 )
             data_dict[feature] = f_data
         return pd.DataFrame(data_dict)
 
     def genDatasetFilename(self) -> str:
-        return '_'.join([
-                self.sim_type,
-                'nSubject-'+str(self.n_subjects),
-                'nDay-'+str(self.n_days),
-            ]) + '.csv'
+        return (
+            "_".join(
+                [
+                    self.sim_type,
+                    "nSubject-" + str(self.n_subjects),
+                    "nDay-" + str(self.n_days),
+                ]
+            )
+            + ".csv"
+        )
 
     def simulateData(self, use_cache: bool = True) -> pd.DataFrame:
-        """ Wrapper function to simulate dataset
+        """Wrapper function to simulate dataset
 
         Args:
             use_cache (bool, optional): Use cached file if it exists. Defaults to True.
@@ -192,24 +192,20 @@ class BaseDailyDataSimulator:
             pd.DataFrame: simulated dataset
         """
         sim_data = []
-        out_path = Path(
-            'cache',
-            self.genDatasetFilename()
-        )
+        out_path = Path("cache", self.genDatasetFilename())
 
         # Use cached data if available
         if out_path.is_file() and use_cache:
-            print(out_path, 'exists. Using cached dataset')
+            print(out_path, "exists. Using cached dataset")
             return pd.read_csv(out_path)
 
         else:
             # Simulate data
             for i in range(self.n_subjects):
                 subject_data = self.generateSubjectData(
-                        subject_id='SID_'+str(i),
-                        random_seed=i
-                    )
-                subject_data['ema_sad_choices'] = self.calcSadEMA(subject_data)
+                    subject_id="SID_" + str(i), random_seed=i
+                )
+                subject_data["ema_sad_choices"] = self.calcSadEMA(subject_data)
                 sim_data.append(subject_data)
 
             sim_data = pd.concat(sim_data)
@@ -217,22 +213,23 @@ class BaseDailyDataSimulator:
             # Save data
             if self.cache_simulation:
                 sim_data.to_csv(out_path, index=False)
-                print('\tSaved data to:', out_path)
+                print("\tSaved data to:", out_path)
             return sim_data
 
 
 # TODO: Create tests showing that this works
 class RandomAnomalySimulator(BaseDailyDataSimulator):
-    """ Daily data simulator which adds anomalies at a set frequency
+    """Daily data simulator which adds anomalies at a set frequency
     Anomalies are defined as days where the feature value is not tied to historical
     data and has a higher standard deviation
     """
+
     def __init__(
         self,
         feature_params: Dict[str, Dict],
         n_days: int = 60,
         n_subjects: int = 2,
-        sim_type: str = 'weeklyAnomaly',
+        sim_type: str = "weeklyAnomaly",
         cache_simulation: bool = True,
     ):
         BaseDailyDataSimulator.__init__(
@@ -244,18 +241,17 @@ class RandomAnomalySimulator(BaseDailyDataSimulator):
             cache_simulation,
         )
         for feature, params in self.feature_params.items():
-            if ('anomaly_frequency' not in params.keys()) or ('anomaly_std_scale' not in params.keys()):
-                raise ValueError(
-                    feature
-                    + ' Anomaly frequency and scale not specified'
-                )
+            if ("anomaly_frequency" not in params.keys()) or (
+                "anomaly_std_scale" not in params.keys()
+            ):
+                raise ValueError(feature + " Anomaly frequency and scale not specified")
 
     def generateSubjectData(
         self,
         subject_id: str,
         random_seed: int = 0,
     ) -> pd.DataFrame:
-        """ Generate daily features for 1 subject with anomalies
+        """Generate daily features for 1 subject with anomalies
 
         Args:
             subject_id (str): name for subject_id column
@@ -266,66 +262,64 @@ class RandomAnomalySimulator(BaseDailyDataSimulator):
         """
         np.random.seed(random_seed)
         data_dict = {
-            'subject_id': [subject_id] * self.n_days,
-            'study_day': range(self.n_days),
+            "subject_id": [subject_id] * self.n_days,
+            "study_day": range(self.n_days),
         }
         for feature, params in self.feature_params.items():
             f_data = np.full((self.n_days), np.nan)
             for i in range(self.n_days):
-                if (i == 0):
+                if i == 0:
                     # Random starting point
-                    f_data[i] = (params['max'] - params['min'])\
-                        * np.random.random()\
-                        + params['min']
+                    f_data[i] = (
+                        params["max"] - params["min"]
+                    ) * np.random.random() + params["min"]
                     continue
-                elif params['history_len'] == 0:
-                    history = [params['mean']]
+                elif params["history_len"] == 0:
+                    history = [params["mean"]]
                 else:
-                    history = f_data[i-1:(i+params['history_len']-1)]
-                
+                    history = f_data[i - 1 : (i + params["history_len"] - 1)]
+
                 # If anomaly day -> increase std and set around mean
-                is_anomaly_day = (
-                    (params['anomaly_frequency'] > 0) and
-                    (not (i % params['anomaly_frequency']))
+                is_anomaly_day = (params["anomaly_frequency"] > 0) and (
+                    not (i % params["anomaly_frequency"])
                 )
                 if is_anomaly_day:
-                    f_data[i] = (params['max'] - params['min'])\
-                        * np.random.random()\
-                        + params['min']
+                    f_data[i] = (
+                        params["max"] - params["min"]
+                    ) * np.random.random() + params["min"]
                 else:
                     f_data[i] = self.genDailyFeature(
                         history=history,
-                        std=params['std'],
-                        max=params['max'],
-                        min=params['min'],
+                        std=params["std"],
+                        max=params["max"],
+                        min=params["min"],
                     )
             data_dict[feature] = f_data
         return pd.DataFrame(data_dict)
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     n_subjects = 2
     n_days = 60
 
-    with open('lib/feature_parameters.json', 'r') as fp:
+    with open("lib/feature_parameters.json", "r") as fp:
         all_feature_params = json.load(fp)
 
     for sim_type, feature_params in all_feature_params.items():
-        if sim_type == 'base':
-            print('Simulating base with no anomaly')
+        if sim_type == "base":
+            print("Simulating base with no anomaly")
             simulator = BaseDailyDataSimulator(
                 feature_params=all_feature_params[sim_type],
                 n_days=n_days,
                 n_subjects=n_subjects,
-                sim_type=sim_type
+                sim_type=sim_type,
             )
             data = simulator.simulateData()
-            print('\nPreview of data: ')
+            print("\nPreview of data: ")
             print(data.head(n=10))
 
         else:
-            print('Simulating', sim_type)
+            print("Simulating", sim_type)
             simulator = RandomAnomalySimulator(
                 feature_params=feature_params,
                 n_days=n_days,
@@ -333,5 +327,5 @@ if __name__ == '__main__':
                 sim_type=sim_type,
             )
             data = simulator.simulateData(use_cache=False)
-            print('\nPreview of data: ')
+            print("\nPreview of data: ")
             print(data.head(n=10))

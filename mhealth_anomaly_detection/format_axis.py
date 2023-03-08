@@ -6,7 +6,7 @@ from matplotlib import rcParams
 
 
 def setup_style():
-    rcParams['font.family'] = 'Arial'
+    rcParams["font.family"] = "Arial"
 
 
 def despine_thicken_axes(
@@ -20,8 +20,8 @@ def despine_thicken_axes(
     xlabel_fontsize: float = None,
     ylabel_fontsize: float = None,
     heatmap: bool = False,
-  ):
-    """ Despine axes, rotate x or y, thicken axes
+):
+    """Despine axes, rotate x or y, thicken axes
 
     Arguments:
         ax -- matplotlib axis to modify
@@ -36,11 +36,11 @@ def despine_thicken_axes(
         ax -- modified input axis
     """
     # Change axis tick thickness
-    ax.xaxis.set_tick_params(width=lw, length=lw*2)
-    ax.yaxis.set_tick_params(width=lw, length=lw*2)
+    ax.xaxis.set_tick_params(width=lw, length=lw * 2)
+    ax.yaxis.set_tick_params(width=lw, length=lw * 2)
 
     # Make axis lines thicker
-    for axis in ['top', 'bottom', 'left', 'right']:
+    for axis in ["top", "bottom", "left", "right"]:
         ax.spines[axis].set_linewidth(lw)
 
     # Set fontsize variables
@@ -62,13 +62,13 @@ def despine_thicken_axes(
         sns.despine()
 
     # Rotate tick labels and set thickness
-    for var in ['x', 'y']:
+    for var in ["x", "y"]:
         fs = y_tick_fontsize
         rot = y_rotation
-        if var == 'x':
+        if var == "x":
             fs = x_tick_fontsize
             rot = x_rotation
-        ax.tick_params(axis=var, which='major', labelsize=fs)
-        ax.tick_params(axis=var, which='minor', labelsize=fs*.8)
+        ax.tick_params(axis=var, which="major", labelsize=fs)
+        ax.tick_params(axis=var, which="minor", labelsize=fs * 0.8)
         ax.tick_params(axis=var, rotation=rot)
     return ax

@@ -1,4 +1,3 @@
-
 """_summary_ Experiment 02: Extension of exp01, now comparing how number of features affects performance
 _author_ Samir Akre <sakre@g.ucla.edu>
 
@@ -21,7 +20,7 @@ from mhealth_anomaly_detection import simulate_daily
 from mhealth_anomaly_detection import anomaly_detection
 from mhealth_anomaly_detection import format_axis as fa
 
-EXPERIMENT = 'exp02'
+EXPERIMENT = "exp02"
 USE_CACHE = True
 PARALLEL = True
 NUM_CPUS = 6
@@ -30,9 +29,10 @@ NUM_CPUS = 6
 N_SUBJECTS = 100
 DAYS_OF_DATA = 120
 FREQUENCIES = [28]
-WINDOW_SIZES = [14] # Can likely reduce to 2
+WINDOW_SIZES = [14]  # Can likely reduce to 2
 N_FEATURES_LIST = [5, 10, 25, 100, 200]
-KEY_DIFFERENCE = 'n_features'
+KEY_DIFFERENCE = "n_features"
+
 
 def run_ad_on_simulated(
     feature_params: Dict,
@@ -41,7 +41,6 @@ def run_ad_on_simulated(
     window_size: int,
     n_features: int,
 ) -> pd.DataFrame:
-
     # Simulate data according to params above
     simulator = simulate_daily.RandomAnomalySimulator(
         feature_params=feature_params,
@@ -53,14 +52,13 @@ def run_ad_on_simulated(
 
     # Simulate Data
     data = simulator.simulateData(use_cache=False)
-    data['anomaly_freq'] = anomaly_frequency
-    data['history_type'] = param_name
-    data['window_size'] = window_size
-    data['anomaly'] = (
-        ((data['study_day'] % anomaly_frequency) == 0) &
-        (data['study_day'] > 0)
+    data["anomaly_freq"] = anomaly_frequency
+    data["history_type"] = param_name
+    data["window_size"] = window_size
+    data["anomaly"] = ((data["study_day"] % anomaly_frequency) == 0) & (
+        data["study_day"] > 0
     )
-    data['n_features'] = n_features
+    data["n_features"] = n_features
 
     # Run Anomaly Detection
     n_components = 5
@@ -75,61 +73,61 @@ def run_ad_on_simulated(
             features=features,
             window_size=window_size,
             max_missing_days=0,
-            n_components=n_components
+            n_components=n_components,
         ),
         anomaly_detection.NMFRollingAnomalyDetector(
             features=features,
             window_size=window_size,
             max_missing_days=0,
-            n_components=n_components
+            n_components=n_components,
         ),
         anomaly_detection.SVMRollingAnomalyDetector(
             features=features,
             window_size=window_size,
             max_missing_days=0,
             n_components=n_components,
-            kernel='poly'
+            kernel="poly",
         ),
         anomaly_detection.SVMRollingAnomalyDetector(
             features=features,
             window_size=window_size,
             max_missing_days=0,
             n_components=n_components,
-            kernel='sigmoid'
+            kernel="sigmoid",
         ),
         anomaly_detection.SVMRollingAnomalyDetector(
             features=features,
             window_size=window_size,
             max_missing_days=0,
             n_components=n_components,
-            kernel='rbf'
+            kernel="rbf",
         ),
     ]
     for detector in detectors:
         # Remove # of components from name
         dname = detector.name
-        data[f'{dname}_anomaly'] = np.nan
+        data[f"{dname}_anomaly"] = np.nan
         for sid in data.subject_id.unique():
             subject_data = data.loc[data.subject_id == sid]
-            data.loc[data.subject_id == sid, f'{dname}_anomaly'] = detector.labelAnomaly(subject_data)
+            data.loc[
+                data.subject_id == sid, f"{dname}_anomaly"
+            ] = detector.labelAnomaly(subject_data)
     return data
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     start = time.perf_counter()
 
     # DATA SIMULATION
-    print('Generating simulated data and running anomaly detection...')
-
+    print("Generating simulated data and running anomaly detection...")
 
     # File name for the simulated dataset with anomaly detection run
-    fname = f'{EXPERIMENT}_nSubjects-{N_SUBJECTS}_nDays-{DAYS_OF_DATA}.csv'
-    fpath = Path('cache', fname)
+    fname = f"{EXPERIMENT}_nSubjects-{N_SUBJECTS}_nDays-{DAYS_OF_DATA}.csv"
+    fpath = Path("cache", fname)
 
     # If data is cached, do not run anomaly detection only results generation
     if USE_CACHE and fpath.exists():
-        print('\tUsing cached data from: ', fpath)
+        print("\tUsing cached data from: ", fpath)
         data_df = pd.read_csv(fpath)
     else:
         datasets = []
@@ -140,21 +138,22 @@ if __name__ == '__main__':
             for n_features in N_FEATURES_LIST:
                 for window_size in WINDOW_SIZES:
                     run_parameters = {}
-                    run_parameters['anomaly_frequency'] = anomaly_frequency
-                    run_parameters['n_features'] = n_features
-                    run_parameters['feature_params'] = {
-                        f'history-{28}_anomalyFrequency-{anomaly_frequency}_{i}': {
+                    run_parameters["anomaly_frequency"] = anomaly_frequency
+                    run_parameters["n_features"] = n_features
+                    run_parameters["feature_params"] = {
+                        f"history-{28}_anomalyFrequency-{anomaly_frequency}_{i}": {
                             "min": 0,
                             "max": 10,
                             "mean": 5,
                             "std": 2,
                             "history_len": 28,
                             "anomaly_frequency": anomaly_frequency,
-                            "anomaly_std_scale": 3
-                        } for i in range(n_features)
+                            "anomaly_std_scale": 3,
+                        }
+                        for i in range(n_features)
                     }
-                    run_parameters['param_name'] = 'history_all_28'
-                    run_parameters['window_size'] = window_size
+                    run_parameters["param_name"] = "history_all_28"
+                    run_parameters["window_size"] = window_size
                     run_list.append(run_parameters)
 
         def expand_args_run(arg):
@@ -163,35 +162,27 @@ if __name__ == '__main__':
         # Run parameters - simulation + anomaly detection
         if PARALLEL:
             # Parallel process
-            datasets = p_map(
-                expand_args_run,
-                run_list,
-                num_cpus=NUM_CPUS
-            )
+            datasets = p_map(expand_args_run, run_list, num_cpus=NUM_CPUS)
         else:
             # Don't parallel process
             datasets = []
             for i, run_params in tqdm(enumerate(run_list)):
                 if i < 2:
                     continue
-                datasets.append(
-                    run_ad_on_simulated(**run_params)
-                )
+                datasets.append(run_ad_on_simulated(**run_params))
 
         data_df = pd.concat(datasets)
         data_df.to_csv(fpath, index=False)
 
     anomaly_detector_cols = [d for d in data_df.columns if d.endswith("_anomaly")]
-    groupby_cols = ['subject_id', KEY_DIFFERENCE, 'window_size', 'anomaly_freq']
-    print(f'Comparing across {KEY_DIFFERENCE}: ', data_df[KEY_DIFFERENCE].unique())
+    groupby_cols = ["subject_id", KEY_DIFFERENCE, "window_size", "anomaly_freq"]
+    print(f"Comparing across {KEY_DIFFERENCE}: ", data_df[KEY_DIFFERENCE].unique())
 
     # PERFORMANCE CALCULATIONS
-    print('Calculating Metrics...')
-
-
+    print("Calculating Metrics...")
 
     # Calculate F1, sensitivity, specificity
-    print('\tF1, sensitivity, specificity')
+    print("\tF1, sensitivity, specificity")
     performance_df = anomaly_detection.performance_metrics(
         data=data_df,
         groupby_cols=groupby_cols,
@@ -199,32 +190,32 @@ if __name__ == '__main__':
     )
 
     # PLOTTING
-    print('Plotting...')
+    print("Plotting...")
 
     hm_size = (10, 7)
 
     # Plot performance metrics per condition
-    for metric in ['accuracy', 'sensitivity', 'specificity', 'F1']:
+    for metric in ["accuracy", "sensitivity", "specificity", "F1"]:
         fig, ax = plt.subplots(figsize=hm_size)
         sns.heatmap(
             performance_df.pivot_table(
                 values=metric,
                 columns=[KEY_DIFFERENCE],
-                index=['model'],
+                index=["model"],
             ).round(2),
             annot=True,
             square=True,
             vmin=0,
             vmax=1,
-            ax=ax
+            ax=ax,
         )
-        fname = Path('output', EXPERIMENT, f'{metric}_heatmap_n{N_SUBJECTS}.png')
+        fname = Path("output", EXPERIMENT, f"{metric}_heatmap_n{N_SUBJECTS}.png")
         fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
         plt.tight_layout()
         plt.gcf().savefig(str(fname))
         plt.close()
 
-    print(performance_df.groupby('model').F1.describe().round(2))
+    print(performance_df.groupby("model").F1.describe().round(2))
 
     # TODO: calculate how many induced anomalies were missed [no detected anomaly before next anomaly]
     # TODO: calculate how many detected anomalies were before the first induced
