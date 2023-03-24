@@ -7,6 +7,11 @@ anomalies. heatmap of average (mean/median) distance from true anomalies to
 detected anomalies. Heatmap of sensitivity/specificity/accuracy of models at
 predicting anomalous days
 """
+import sys
+
+# Make imports work
+# TODO: Remove this dependency -- worked fine when using poetry, but not just python3
+sys.path.insert(0, "/Users/sakre/Code/dgc/mhealth_anomaly_detection")
 import time
 import pandas as pd
 from tqdm.auto import tqdm
@@ -19,6 +24,7 @@ import matplotlib.pyplot as plt
 from mhealth_anomaly_detection import simulate_daily
 from mhealth_anomaly_detection import anomaly_detection
 from mhealth_anomaly_detection import format_axis as fa
+from mhealth_anomaly_detection.wrapper_functions import calcSimMetrics
 
 EXPERIMENT = "exp03"
 USE_CACHE = True
@@ -128,8 +134,12 @@ def run_ad_on_simulated(
         for sid in data.subject_id.unique():
             subject_data = data.loc[data.subject_id == sid]
             data.loc[
+                data.subject_id == sid, f"{dname}_anomaly_score"
+            ] = detector.getContinuous(subject_data, recalc_re=True)
+
+            data.loc[
                 data.subject_id == sid, f"{dname}_anomaly"
-            ] = detector.labelAnomaly(subject_data)
+            ] = detector.labelAnomaly(subject_data, recalc_re=False)
     return data
 
 
@@ -195,7 +205,6 @@ if __name__ == "__main__":
         data_df = pd.concat(datasets)
         data_df.to_csv(fpath, index=False)
 
-    anomaly_detector_cols = [d for d in data_df.columns if d.endswith("_anomaly")]
     groupby_cols = [
         "subject_id",
         KEY_DIFFERENCE,
@@ -203,40 +212,15 @@ if __name__ == "__main__":
         "n_features",
         "anomaly_freq",
     ]
-    print(f"Comparing across {KEY_DIFFERENCE}: ", data_df[KEY_DIFFERENCE].unique())
+    corr, corr_table, performance_cont_df, performance_df = calcSimMetrics(
+        data_df,
+        key_difference=KEY_DIFFERENCE,
+        groupby_cols=groupby_cols
+    )
 
     # PERFORMANCE CALCULATIONS
     print("Calculating Metrics...")
 
-    # Calculate correlation of # anomalies model detects to # induced
-    print("\tSpearman R - detected vs induced anomalies")
-    corr = anomaly_detection.correlateDetectedToInduced(
-        data=data_df,
-        anomaly_detector_cols=anomaly_detector_cols,
-        groupby_cols=groupby_cols,
-        corr_across=[KEY_DIFFERENCE, "window_size"],
-    )
-    corr_table = corr.pivot_table(
-        index=["detector"],
-        columns=["window_size", KEY_DIFFERENCE],
-        values="rho",
-        aggfunc="median",
-    )
-
-    # Calculate # of day difference between anomaly induced and closest detected anomaly
-    print("\tDistance of anomalies to detected anomaly")
-    anomaly_detector_behavior = anomaly_detection.distance_real_to_detected_anomaly(
-        data=data_df,
-        anomaly_detector_cols=anomaly_detector_cols,
-        groupby_cols=groupby_cols,
-    )
-    # Calculate accuracy, sensitivity, specificity
-    print("\tAccuracy, sensitivity, specificity")
-    performance_df = anomaly_detection.performance_metrics(
-        data=data_df,
-        groupby_cols=groupby_cols,
-        anomaly_detector_cols=anomaly_detector_cols,
-    )
 
     # PLOTTING
     print("Plotting...")
@@ -286,31 +270,8 @@ if __name__ == "__main__":
         plt.gcf().savefig(str(fname))
         plt.close()
 
-    # Plot mean/median distance per condition
-    for metric in ["mean", "median"]:
-        fig, ax = plt.subplots(figsize=hm_size)
-        sns.heatmap(
-            anomaly_detector_behavior.pivot_table(
-                values="distance",
-                columns=["anomaly_freq", "window_size"],
-                index=["model", KEY_DIFFERENCE],
-                aggfunc=metric,
-            ),
-            annot=True,
-            square=True,
-            vmin=0,
-            ax=ax,
-        )
-        fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
-        fname = Path(out_dir, f"distance_{metric}_heatmap_n{N_SUBJECTS}.png")
-        plt.tight_layout()
-        plt.gcf().savefig(str(fname))
-        plt.close()
 
-    print(performance_df.groupby("model").F1.describe().round(2))
-
-    # TODO: calculate how many induced anomalies were missed [no detected anomaly before next anomaly]
-    # TODO: calculate how many detected anomalies were before the first induced
+    print(performance_cont_df.groupby("model").average_precision.describe().round(2))
 
     stop = time.perf_counter()
-    print(f"\nCompleted in {stop - start:0.2f} seconds")
+    print(f"\nCompleted in {(stop - start)/60:0.2f} minutes")

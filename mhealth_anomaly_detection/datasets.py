@@ -82,7 +82,7 @@ class GLOBEM(DatasetBase):
         data = self.filter_redundant_cols(data)
         data["date"] = pd.to_datetime(data["date"], format="%Y-%m-%d")
         data = self.add_study_day(data)
-        data = self.fill_empty_days(data)
+        data = fill_empty_days(data)
         data = self.filter_high_missing_participants(data)
         data = self.add_missingness_indicator(data)
 
@@ -103,38 +103,6 @@ class GLOBEM(DatasetBase):
         ).dt.days
         self.id_cols = self.id_cols + ["study_day"]
         return reform_data
-
-    # TODO: Test function
-    def fill_empty_days(self, data: pd.DataFrame) -> pd.DataFrame:
-        expected_rows = []
-        for (sid), s_df in data.groupby("subject_id"):
-            min_d = s_df.study_day.min()
-            max_d = s_df.study_day.max()
-            n_days = 1 + max_d - min_d
-            expected_rows.append(
-                pd.DataFrame(
-                    {
-                        "subject_id": [sid] * n_days,
-                        "study_day": np.arange(min_d, max_d + 1),
-                    }
-                )
-            )
-
-        filled = data.merge(
-            pd.concat(expected_rows),
-            how="right",
-            validate="1:1",
-        )
-
-        print(
-            "Filling empty study days with NaN values going from",
-            data.shape[0],
-            "to",
-            filled.shape[0],
-            ". Added ",
-            filled.shape[0] - data.shape[0],
-        )
-        return filled
 
     def combine_data(self) -> pd.DataFrame:
         surveys = self.get_weekly_phq4()
@@ -439,34 +407,7 @@ class CrossCheck(DatasetBase):
         self.behavior_cols = [f for f in self.feature_cols if "ema" not in f]
 
         # Preprocess data
-        self.data = self.fill_empty_days(self.preprocess()).fillna(np.nan)
-
-    @staticmethod
-    def fill_empty_days(data: pd.DataFrame) -> pd.DataFrame:
-        expected_rows = []
-        for (eid, sid), s_df in data.groupby(["eureka_id", "subject_id"]):
-            min_d = s_df.study_day.min()
-            max_d = s_df.study_day.max()
-            n_days = 1 + max_d - min_d
-            expected_rows.append(
-                pd.DataFrame(
-                    {
-                        "subject_id": [sid] * n_days,
-                        "eureka_id": [eid] * n_days,
-                        "study_day": np.arange(min_d, max_d + 1),
-                    }
-                )
-            )
-
-            # Uncomment to show effect of adding rows
-            # if expected_rows[-1].shape[0] != s_df.shape[0]:
-            #     print('Empty rows added for:', sid, eid, expected_rows[-1].shape[0], s_df.shape[0])
-
-        return data.merge(
-            pd.concat(expected_rows),
-            how="right",
-            validate="1:1",
-        )
+        self.data = fill_empty_days(self.preprocess()).fillna(np.nan)
 
     def preprocess(
         self,
@@ -504,3 +445,35 @@ class CrossCheck(DatasetBase):
         ] = np.nan
 
         return reform_data
+
+
+def fill_empty_days(data: pd.DataFrame) -> pd.DataFrame:
+    expected_rows = []
+    for (sid), s_df in data.groupby("subject_id"):
+        min_d = s_df.study_day.min()
+        max_d = s_df.study_day.max()
+        n_days = 1 + max_d - min_d
+        expected_rows.append(
+            pd.DataFrame(
+                {
+                    "subject_id": [sid] * n_days,
+                    "study_day": np.arange(min_d, max_d + 1),
+                }
+            )
+        )
+
+    filled = data.merge(
+        pd.concat(expected_rows),
+        how="right",
+        validate="1:1",
+    )
+
+    print(
+        "Filling empty study days with NaN values going from",
+        data.shape[0],
+        "to",
+        filled.shape[0],
+        ". Added ",
+        filled.shape[0] - data.shape[0],
+    )
+    return filled

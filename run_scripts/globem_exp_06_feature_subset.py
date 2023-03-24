@@ -51,7 +51,7 @@ MAX_MISSING_DAYS = 2
 EXPERIMENT = "exp06"
 
 # Dataset Parameters
-YEAR = 3
+YEAR = 2
 SENSOR_TYPES = ["sleep", "steps", "location", "call"]
 FEATURES = [
     "f_loc:phone_locations_doryab_locationentropy:allday",
@@ -296,4 +296,4 @@ if __name__ == "__main__":
             plt.close()
 
     stop = time.perf_counter()
-    print(f"\nCompleted in {stop - start:0.2f} seconds")
+    print(f"\nCompleted in {(stop - start)/60:0.2f} minutes")

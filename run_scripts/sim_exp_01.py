@@ -18,6 +18,11 @@ Output: heatmap of correlation of frequency induced anomalies to detected
 anomalies. heatmap of average (mean/median) distance from true anomalies to 
 detected anomalies.
 """
+import sys
+
+# Make imports work
+# TODO: Remove this dependency -- worked fine when using poetry, but not just python3
+sys.path.insert(0, "/Users/sakre/Code/dgc/mhealth_anomaly_detection")
 
 import time
 import pandas as pd
@@ -31,19 +36,29 @@ import matplotlib.pyplot as plt
 from mhealth_anomaly_detection import simulate_daily
 from mhealth_anomaly_detection import anomaly_detection
 from mhealth_anomaly_detection import format_axis as fa
+from mhealth_anomaly_detection.wrapper_functions import calcSimMetrics
+
+DEBUG = False
 
 EXPERIMENT = "exp01"
 USE_CACHE = False
 PARALLEL = True
-NUM_CPUS = 6
+NUM_CPUS = 10
 
 # Dataset parameters
 N_SUBJECTS = 100
-DAYS_OF_DATA = 90
+DAYS_OF_DATA = 120
 FREQUENCIES = [2, 7, 14, 28]
-WINDOW_SIZES = [7, 14, 28]  # Can likely reduce to 2
+WINDOW_SIZES = [7, 14, 28]  
 N_FEATURES = 5
 KEY_DIFFERENCE = "history_type"
+
+if DEBUG:
+    N_SUBJECTS = 2
+    FREQUENCIES = [2, 7]
+    WINDOW_SIZES = [28] 
+    USE_CACHE = False
+    PARALLEL = False
 
 # Ignore divide by 0 error -> expected and happens in PCA
 np.seterr(divide="ignore", invalid="ignore")
@@ -127,16 +142,42 @@ def run_ad_on_simulated(
             max_missing_days=0,
         ),
     ]
-    for detector in detectors:
-        # Remove # of components from name
-        dname = detector.name
-        data[f"{dname}_anomaly"] = np.nan
-        for sid in data.subject_id.unique():
-            subject_data = data.loc[data.subject_id == sid]
-            data.loc[
-                data.subject_id == sid, f"{dname}_anomaly"
-            ] = detector.labelAnomaly(subject_data)
-    return data
+    if DEBUG:
+        detectors = detectors[:2]
+
+    def detectAnomalies(grouped) -> pd.DataFrame:
+        index_cols = ["subject_id", "study_day", "window_size"]
+        _, subject_data = grouped
+        for detector in detectors:
+            dname = detector.name
+            subject_data[f"{dname}_anomaly"] = np.nan
+            subject_data[f"{dname}_anomaly_score"] = detector.getContinuous(
+                subject_data, recalc_re=True
+            )
+            subject_data[f"{dname}_anomaly"] = detector.labelAnomaly(
+                subject_data,
+                recalc_re=False
+            )
+        return subject_data.set_index(index_cols)
+
+    anomalies_detected_list = []
+    if PARALLEL:
+        ad = pd.concat(
+            p_map(
+                detectAnomalies,
+                data.groupby("subject_id"),
+                num_cpus=NUM_CPUS,
+            )
+        )
+    else:
+        ad = []
+        for s in data.groupby("subject_id"):
+            print(s[0])
+            ad.append(detectAnomalies(s))
+        ad = pd.concat(ad)
+    anomalies_detected_list.append(ad)
+
+    return pd.concat(anomalies_detected_list).reset_index()
 
 
 if __name__ == "__main__":
@@ -199,22 +240,15 @@ if __name__ == "__main__":
         def expand_args_run(kwargs):
             return run_ad_on_simulated(**kwargs)
 
-        # Run parameters - simulation + anomaly detection
-        if PARALLEL:
-            # Parallel process
-            datasets = p_map(expand_args_run, run_list, num_cpus=NUM_CPUS)
-        else:
-            # Don't parallel process
-            datasets = []
-            for i, run_params in tqdm(enumerate(run_list)):
-                if i < 2:
-                    continue
-                datasets.append(run_ad_on_simulated(**run_params))
+        # Don't parallel process
+        datasets = []
+        for i, run_params in tqdm(enumerate(run_list)):
+            print(f'Running {i+1} of {len(run_list)}')
+            datasets.append(run_ad_on_simulated(**run_params))
 
         data_df = pd.concat(datasets)
         data_df.to_csv(fpath, index=False)
 
-    anomaly_detector_cols = [d for d in data_df.columns if d.endswith("_anomaly")]
     groupby_cols = [
         "subject_id",
         KEY_DIFFERENCE,
@@ -222,41 +256,12 @@ if __name__ == "__main__":
         "n_features",
         "anomaly_freq",
     ]
-    print(f"Comparing across {KEY_DIFFERENCE}: ", data_df[KEY_DIFFERENCE].unique())
-
-    # PERFORMANCE CALCULATIONS
-    print("Calculating Metrics...")
-
-    # Calculate correlation of # anomalies model detects to # induced
-    print("\tSpearman R - detected vs induced anomalies")
-    corr = anomaly_detection.correlateDetectedToInduced(
-        data=data_df,
-        anomaly_detector_cols=anomaly_detector_cols,
-        groupby_cols=groupby_cols,
-        corr_across=[KEY_DIFFERENCE, "window_size"],
+    
+    corr, corr_table, performance_cont_df, performance_df = calcSimMetrics(
+        data_df,
+        key_difference=KEY_DIFFERENCE,
+        groupby_cols=groupby_cols
     )
-    corr_table = corr.pivot_table(
-        index=["detector"],
-        columns=["window_size", KEY_DIFFERENCE],
-        values="rho",
-        aggfunc="median",
-    )
-
-    # Calculate # of day difference between anomaly induced and closest detected anomaly
-    print("\tDistance of anomalies to detected anomaly")
-    anomaly_detector_behavior = anomaly_detection.distance_real_to_detected_anomaly(
-        data=data_df,
-        anomaly_detector_cols=anomaly_detector_cols,
-        groupby_cols=groupby_cols,
-    )
-    # Calculate accuracy, sensitivity, specificity
-    print("\tAccuracy, sensitivity, specificity")
-    performance_df = anomaly_detection.performance_metrics(
-        data=data_df,
-        groupby_cols=groupby_cols,
-        anomaly_detector_cols=anomaly_detector_cols,
-    )
-
     # PLOTTING
     print("Plotting...")
     out_dir = Path("output", EXPERIMENT)
@@ -301,27 +306,6 @@ if __name__ == "__main__":
         )
         fname = Path(out_dir, f"{metric}_heatmap_n{N_SUBJECTS}.png")
         fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
-        plt.tight_layout()
-        plt.gcf().savefig(str(fname))
-        plt.close()
-
-    # Plot mean/median distance per condition
-    for metric in ["mean", "median"]:
-        fig, ax = plt.subplots(figsize=hm_size)
-        sns.heatmap(
-            anomaly_detector_behavior.pivot_table(
-                values="distance",
-                columns=["anomaly_freq", "window_size"],
-                index=["model", KEY_DIFFERENCE],
-                aggfunc=metric,
-            ),
-            annot=True,
-            square=True,
-            vmin=0,
-            ax=ax,
-        )
-        fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
-        fname = Path(out_dir, f"distance_{metric}_heatmap_n{N_SUBJECTS}.png")
         plt.tight_layout()
         plt.gcf().savefig(str(fname))
         plt.close()

@@ -1,4 +1,4 @@
-""" For exp 4,5,6,8 -- plot results combining window sizes
+""" For exp 4,5,6 -- plot results combining window sizes
 """
 import sys
 
@@ -21,7 +21,8 @@ from mhealth_anomaly_detection import load_refs as lr
 from mhealth_anomaly_detection import plots
 
 YEARS = [2, 3]
-EXPERIMENTS = ["exp04", "exp05", "exp06", "exp08"]
+EXPERIMENTS = ["exp04", "exp05", "exp06"]
+EXPERIMENTS = ["exp06"]
 GLOBEM = datasets.GLOBEM(load_data=False, data_path="~/")
 CACHE_DIR = "cache"
 PARALLEL = False
@@ -118,6 +119,7 @@ def run_plots(inputs) -> None:
         "period",
     ]
     targets = ["phq_start", "phq_change", "phq_stop"]
+    cmap = sns.diverging_palette(230, 20, as_cmap=True)
     for target in targets:
         corr = anomaly_detection.correlateDetectedToOutcome(
             phq_anomalies_qc,
@@ -155,7 +157,10 @@ def run_plots(inputs) -> None:
             plt.close()
 
             # Plot top-2, middle, and bottom-2 performer
-            p1_corr = corr[corr.period == 1].sort_values(by="rho")
+            p1_corr = corr[
+                (corr.period == 1) &
+                (~corr.detector.str.startswith('SVM'))
+            ].sort_values(by="rho")
             inds = [0, 1, 2, 3, round(p1_corr.shape[0] / 2), -3, -2, -1]
             p1_corr.iloc[inds].to_csv(Path(out_dir, f"example_subs.csv"), index=False)
             for ind in inds:
@@ -196,7 +201,7 @@ def run_plots(inputs) -> None:
             values="rho",
         )
 
-        sns.clustermap(vals, cmap="coolwarm", vmin=-1, vmax=1, figsize=(20, 20))
+        sns.clustermap(vals, cmap=cmap, vmin=-1, vmax=1, figsize=(20, 20))
         fname = Path(out_dir, f'individual_clustermap_spearman{"rho"}_{target}.png')
         plt.tight_layout()
         plt.gcf().savefig(str(fname))
@@ -214,8 +219,10 @@ def run_plots(inputs) -> None:
                 vmin=-1,
                 vmax=1,
                 square=True,
-                annot=True,
-                cmap="coolwarm",
+                annot=corr_table.round(2),
+                linewidths=.5,
+                cbar_kws={'shrink': .5},
+                cmap=cmap,
                 ax=ax,
             )
             fname = Path(out_dir, f"spearman{metric}_{target}_heatmap.png")

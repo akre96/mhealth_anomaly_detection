@@ -8,6 +8,11 @@ anomalies. heatmap of average (mean/median) distance from true anomalies to
 detected anomalies. Heatmap of sensitivity/specificity/accuracy of models at
 predicting anomalous days
 """
+import sys
+
+# Make imports work
+# TODO: Remove this dependency -- worked fine when using poetry, but not just python3
+sys.path.insert(0, "/Users/sakre/Code/dgc/mhealth_anomaly_detection")
 import time
 import pandas as pd
 from tqdm.auto import tqdm
@@ -20,9 +25,10 @@ import matplotlib.pyplot as plt
 from mhealth_anomaly_detection import simulate_daily
 from mhealth_anomaly_detection import anomaly_detection
 from mhealth_anomaly_detection import format_axis as fa
+from mhealth_anomaly_detection.wrapper_functions import calcSimMetrics
 
 EXPERIMENT = "exp07"
-USE_CACHE = True
+USE_CACHE = False
 PARALLEL = True
 NUM_CPUS = 6
 
@@ -32,7 +38,7 @@ N_FEATURES_SIGNAL = 5
 DAYS_OF_DATA = 120
 FREQUENCIES = [28]
 WINDOW_SIZES = [14]
-N_FEATURES_LIST = N_FEATURES_SIGNAL * np.array([1, 2, 5, 10, 20, 100])
+N_FEATURES_LIST = N_FEATURES_SIGNAL * np.array([1, 2, 5, 10, 20])
 print(N_FEATURES_LIST)
 KEY_DIFFERENCE = "n_features"
 
@@ -114,8 +120,12 @@ def run_ad_on_simulated(
         for sid in data.subject_id.unique():
             subject_data = data.loc[data.subject_id == sid]
             data.loc[
+                data.subject_id == sid, f"{dname}_anomaly_score"
+            ] = detector.getContinuous(subject_data, recalc_re=True)
+
+            data.loc[
                 data.subject_id == sid, f"{dname}_anomaly"
-            ] = detector.labelAnomaly(subject_data)
+            ] = detector.labelAnomaly(subject_data, recalc_re=False)
     return data
 
 
@@ -191,42 +201,14 @@ if __name__ == "__main__":
         data_df = pd.concat(datasets)
         data_df.to_csv(fpath, index=False)
 
-    anomaly_detector_cols = [d for d in data_df.columns if d.endswith("_anomaly")]
     groupby_cols = ["subject_id", KEY_DIFFERENCE, "window_size", "anomaly_freq"]
-    print(f"Comparing across {KEY_DIFFERENCE}: ", data_df[KEY_DIFFERENCE].unique())
-
+    corr, corr_table, performance_cont_df, performance_df = calcSimMetrics(
+        data_df,
+        key_difference=KEY_DIFFERENCE,
+        groupby_cols=groupby_cols
+    )
     # PERFORMANCE CALCULATIONS
     print("Calculating Metrics...")
-
-    # Calculate correlation of # anomalies model detects to # induced
-    print("\tSpearman R - detected vs induced anomalies")
-    corr = anomaly_detection.correlateDetectedToInduced(
-        data=data_df,
-        anomaly_detector_cols=anomaly_detector_cols,
-        groupby_cols=groupby_cols,
-        corr_across=[KEY_DIFFERENCE, "window_size"],
-    )
-    corr_table = corr.pivot_table(
-        index=["detector"],
-        columns=["window_size", KEY_DIFFERENCE],
-        values="rho",
-        aggfunc="median",
-    )
-
-    # Calculate # of day difference between anomaly induced and closest detected anomaly
-    print("\tDistance of anomalies to detected anomaly")
-    anomaly_detector_behavior = anomaly_detection.distance_real_to_detected_anomaly(
-        data=data_df,
-        anomaly_detector_cols=anomaly_detector_cols,
-        groupby_cols=groupby_cols,
-    )
-    # Calculate accuracy, sensitivity, specificity
-    print("\tAccuracy, sensitivity, specificity")
-    performance_df = anomaly_detection.performance_metrics(
-        data=data_df,
-        groupby_cols=groupby_cols,
-        anomaly_detector_cols=anomaly_detector_cols,
-    )
 
     # PLOTTING
     print("Plotting...")
@@ -249,29 +231,6 @@ if __name__ == "__main__":
         )
         fname = Path("output", EXPERIMENT, f"{metric}_heatmap_n{N_SUBJECTS}.png")
         fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
-        plt.tight_layout()
-        plt.gcf().savefig(str(fname))
-        plt.close()
-
-    # Plot mean/median distance per condition
-    for metric in ["mean", "median"]:
-        fig, ax = plt.subplots(figsize=hm_size)
-        sns.heatmap(
-            anomaly_detector_behavior.pivot_table(
-                values="distance",
-                columns=KEY_DIFFERENCE,
-                index=["model"],
-                aggfunc=metric,
-            ),
-            annot=True,
-            square=True,
-            vmin=0,
-            ax=ax,
-        )
-        fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
-        fname = Path(
-            "output", EXPERIMENT, f"distance_{metric}_heatmap_n{N_SUBJECTS}.png"
-        )
         plt.tight_layout()
         plt.gcf().savefig(str(fname))
         plt.close()

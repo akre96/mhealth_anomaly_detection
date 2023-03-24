@@ -33,8 +33,8 @@ from mhealth_anomaly_detection import format_axis as fa
 DEBUG = False
 
 PARALLEL = True
-USE_CACHE = False
-USE_CACHE_INTERMEDIATE = True
+USE_CACHE = True
+USE_CACHE_INTERMEDIATE = False
 
 # Ignore divide by 0 error -> expected and happens in PCA
 np.seterr(divide="ignore", invalid="ignore")

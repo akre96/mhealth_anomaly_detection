@@ -8,6 +8,7 @@ from sklearn.ensemble import IsolationForest
 from sklearn.svm import OneClassSVM
 from sklearn.preprocessing import RobustScaler
 from sklearn.pipeline import Pipeline
+from sklearn.metrics import average_precision_score
 import scipy.stats as stats
 from mhealth_anomaly_detection.onmf import Online_NMF
 
@@ -82,6 +83,14 @@ class BaseRollingAnomalyDetector:
         re_df["study_day"] = subject_data["study_day"]
         self.reconstruction_error = re_df
         return re_df
+    
+    def getContinuous(self, subject_data, recalc_re: bool = True) -> pd.Series:
+        re_df = self.reconstruction_error
+        if self.reconstruction_error.empty or recalc_re:
+            re_df = self.getReconstructionError(subject_data)
+
+        return re_df['total_re']
+
 
     # Return if anomalous day labels
     def labelAnomaly(
@@ -228,7 +237,7 @@ class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
         )
         self.name = "SVM" + "_" + str(kernel)
 
-    def labelAnomaly(self, subject_data: pd.DataFrame) -> NDArray:
+    def labelAnomaly(self, subject_data: pd.DataFrame, continuous: bool = False, **kwargs) -> NDArray:
         anomaly_labels = np.full(subject_data.shape[0], 0)
 
         # Predict if last day of window anomalous
@@ -251,10 +260,17 @@ class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
                 if np.any(X.iloc[-1].isnull()):
                     continue
 
-                anomaly_labels[i] = self.model.predict(X.dropna())[-1]
-        anomaly_labels[anomaly_labels == -1.0] = 0
-        anomaly_labels[np.isnan(anomaly_labels)] = 0
-        return anomaly_labels == 1
+                if continuous:
+                    anomaly_labels[i] = self.model.score_samples(X.dropna())[-1]
+                else:
+                    anomaly_labels[i] = self.model.predict(X.dropna())[-1]
+        if not continuous:
+            anomaly_labels[anomaly_labels == -1.0] = 0
+            return anomaly_labels == 1
+        return anomaly_labels
+
+    def getContinuous(self, subject_data, **kwargs) -> NDArray:
+        return self.labelAnomaly(subject_data, continuous=True)
 
 
 # TODO: Refactor with SK-learn implementation
@@ -365,7 +381,7 @@ class IFRollingAnomalyDetector(SVMRollingAnomalyDetector):
 
 
 # Calculate accuracy, sensitivity and specificity
-def performance_metrics(
+def binaryPerformanceMetrics(
     data: pd.DataFrame,
     anomaly_detector_cols: List[str],
     groupby_cols: List[str] = [
@@ -433,6 +449,42 @@ def performance_metrics(
     )
     return performance_df
 
+
+def continuousPerformanceMetrics(
+    data: pd.DataFrame,
+    anomaly_detector_cols: List[str],
+    groupby_cols: List[str] = [
+        "subject_id",
+        "history_type",
+        "window_size",
+        "anomaly_freq",
+    ],
+) -> pd.DataFrame:
+    models = [c.split("_anomaly_score")[0] for c in anomaly_detector_cols]
+    performance_dict = {c: [] for c in groupby_cols}
+    performance_dict["model"] = []
+    performance_dict["average_precision"] = []
+
+    for info, subject_data in tqdm(data.groupby(groupby_cols)):
+
+        # Fix error if one groupby item: info is a string, not a tuple[str]
+        if type(info) == str:
+            info = [info]
+
+        for model in models:
+            for i, val in enumerate(info):
+                performance_dict[groupby_cols[i]].append(val)
+            score_col = f'{model}_anomaly_score'
+            use_df = subject_data[["anomaly", score_col]].dropna()
+            performance_dict["model"].append(model)
+            performance_dict["average_precision"].append(
+                average_precision_score(
+                    use_df['anomaly'],
+                    use_df[f'{model}_anomaly_score'],
+                )
+            )
+    performance_df = pd.DataFrame(performance_dict)
+    return performance_df
 
 # Find distance of induced anomaly to closest detected anomaly
 def distance_real_to_detected_anomaly(

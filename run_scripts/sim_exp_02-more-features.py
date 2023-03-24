@@ -7,6 +7,12 @@ anomalies. heatmap of average (mean/median) distance from true anomalies to
 detected anomalies. Heatmap of sensitivity/specificity/accuracy of models at
 predicting anomalous days
 """
+import sys
+
+# Make imports work
+# TODO: Remove this dependency -- worked fine when using poetry, but not just python3
+sys.path.insert(0, "/Users/sakre/Code/dgc/mhealth_anomaly_detection")
+
 import time
 import pandas as pd
 from tqdm.auto import tqdm
@@ -19,18 +25,19 @@ import matplotlib.pyplot as plt
 from mhealth_anomaly_detection import simulate_daily
 from mhealth_anomaly_detection import anomaly_detection
 from mhealth_anomaly_detection import format_axis as fa
+from mhealth_anomaly_detection.wrapper_functions import calcSimMetrics
 
 EXPERIMENT = "exp02"
-USE_CACHE = True
+USE_CACHE = False
 PARALLEL = True
-NUM_CPUS = 6
+NUM_CPUS = 10
 
 # Dataset parameters
 N_SUBJECTS = 100
 DAYS_OF_DATA = 120
 FREQUENCIES = [28]
-WINDOW_SIZES = [14]  # Can likely reduce to 2
-N_FEATURES_LIST = [5, 10, 25, 100, 200]
+WINDOW_SIZES = [14]
+N_FEATURES_LIST = [5, 10, 25, 50, 100]
 KEY_DIFFERENCE = "n_features"
 
 
@@ -110,8 +117,12 @@ def run_ad_on_simulated(
         for sid in data.subject_id.unique():
             subject_data = data.loc[data.subject_id == sid]
             data.loc[
+                data.subject_id == sid, f"{dname}_anomaly_score"
+            ] = detector.getContinuous(subject_data, recalc_re=True)
+            data.loc[
                 data.subject_id == sid, f"{dname}_anomaly"
-            ] = detector.labelAnomaly(subject_data)
+            ] = detector.labelAnomaly(subject_data, recalc_re=False)
+
     return data
 
 
@@ -174,19 +185,11 @@ if __name__ == "__main__":
         data_df = pd.concat(datasets)
         data_df.to_csv(fpath, index=False)
 
-    anomaly_detector_cols = [d for d in data_df.columns if d.endswith("_anomaly")]
     groupby_cols = ["subject_id", KEY_DIFFERENCE, "window_size", "anomaly_freq"]
-    print(f"Comparing across {KEY_DIFFERENCE}: ", data_df[KEY_DIFFERENCE].unique())
-
-    # PERFORMANCE CALCULATIONS
-    print("Calculating Metrics...")
-
-    # Calculate F1, sensitivity, specificity
-    print("\tF1, sensitivity, specificity")
-    performance_df = anomaly_detection.performance_metrics(
-        data=data_df,
-        groupby_cols=groupby_cols,
-        anomaly_detector_cols=anomaly_detector_cols,
+    corr, corr_table, performance_cont_df, performance_df = calcSimMetrics(
+        data_df,
+        key_difference=KEY_DIFFERENCE,
+        groupby_cols=groupby_cols
     )
 
     # PLOTTING
@@ -221,4 +224,4 @@ if __name__ == "__main__":
     # TODO: calculate how many detected anomalies were before the first induced
 
     stop = time.perf_counter()
-    print(f"\nCompleted in {stop - start:0.2f} seconds")
+    print(f"\nCompleted in {(stop - start)/60:0.2f} minutes")
