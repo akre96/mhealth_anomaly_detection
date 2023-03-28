@@ -112,7 +112,9 @@ if __name__ == "__main__":
             ## Impute data
             print("\nImputing dataset")
             imputer = IterativeImputer(
-                initial_strategy="median", keep_empty_features=True, skip_complete=True
+                initial_strategy="median",
+                keep_empty_features=True,
+                skip_complete=True,
             )
 
             imputed = impute.rollingImpute(
@@ -176,9 +178,9 @@ if __name__ == "__main__":
                             if dname in ["RollingMean"]:
                                 continue
                         subject_data[f"{dname}_anomaly"] = np.nan
-                        subject_data[f"{dname}_anomaly"] = detector.labelAnomaly(
-                            subject_data
-                        )
+                        subject_data[
+                            f"{dname}_anomaly"
+                        ] = detector.labelAnomaly(subject_data)
                     subject_data["window_size"] = window_size
                     return subject_data.set_index(index_cols)
 
@@ -198,14 +200,18 @@ if __name__ == "__main__":
                     ad = pd.concat(ad)
                 anomalies_detected_list.append(ad)
 
-            anomalies_detected = pd.concat(anomalies_detected_list).reset_index()
+            anomalies_detected = pd.concat(
+                anomalies_detected_list
+            ).reset_index()
             anomalies_detected.to_csv(inter_fpath, index=False)
 
         anomalies_detected = pd.read_csv(inter_fpath)
         phq_anomalies_list = []
         print("\n\tCounting anomalies between phq periods")
         for period in ANOMALY_PERIODS:
-            for (window_size), ad_df in anomalies_detected.groupby(["window_size"]):
+            for (window_size), ad_df in anomalies_detected.groupby(
+                ["window_size"]
+            ):
                 phq_anomalies = dataset.get_phq_periods(
                     ad_df,
                     features,
@@ -219,11 +225,15 @@ if __name__ == "__main__":
 
     phq_anomalies = pd.read_csv(fpath)
     # QC
-    phq_anomalies_qc = phq_anomalies[phq_anomalies.days >= phq_anomalies.period * 6]
+    phq_anomalies_qc = phq_anomalies[
+        phq_anomalies.days >= phq_anomalies.period * 6
+    ]
     print("\tOnly keeping periods that have at least 6 days per week")
     print(f"\t\t from {phq_anomalies.shape[0]} to {phq_anomalies_qc.shape[0]}")
     parameter_cols = ["window_size", "period"]
-    anomaly_detector_cols = [d for d in phq_anomalies.columns if d.endswith("_anomaly")]
+    anomaly_detector_cols = [
+        d for d in phq_anomalies.columns if d.endswith("_anomaly")
+    ]
     phq_anom_melt = phq_anomalies_qc.melt(
         id_vars=["subject_id", "start", "phq_change", "phq_stop", "phq_start"]
         + parameter_cols,
@@ -270,7 +280,9 @@ if __name__ == "__main__":
             ax=ax,
         )
         fname = Path(out_dir, f"spearmanr_{target}_heatmap.png")
-        fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
+        fa.despine_thicken_axes(
+            ax, heatmap=True, fontsize=12, x_tick_fontsize=10
+        )
         plt.tight_layout()
         plt.gcf().savefig(str(fname))
         plt.close()

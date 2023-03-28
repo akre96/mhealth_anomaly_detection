@@ -6,12 +6,12 @@ from typing import List, Any
 
 
 def rollingImpute(
-        data: pd.DataFrame,
-        features: List[str],
-        min_days: int,
-        imputer: Any,
-        num_cpus: int,
-    ) -> pd.DataFrame:
+    data: pd.DataFrame,
+    features: List[str],
+    min_days: int,
+    imputer: Any,
+    num_cpus: int,
+) -> pd.DataFrame:
     def impute(input) -> pd.DataFrame:
         _, data = input
         filled_data = np.full((data.shape[0], len(features)), np.nan)
@@ -25,4 +25,6 @@ def rollingImpute(
         data[features] = filled_data
         return data
 
-    return pd.concat(p_map(impute, data.groupby("subject_id"), num_cpus=num_cpus))
+    return pd.concat(
+        p_map(impute, data.groupby("subject_id"), num_cpus=num_cpus)
+    )

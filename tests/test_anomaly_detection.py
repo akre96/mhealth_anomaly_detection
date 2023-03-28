@@ -4,7 +4,9 @@ import numpy as np
 
 N_DAYS = 10
 N_FEATURES = 3
-FEATURES = {f"example_feature_{i}": np.arange(N_DAYS) * i for i in range(N_FEATURES)}
+FEATURES = {
+    f"example_feature_{i}": np.arange(N_DAYS) * i for i in range(N_FEATURES)
+}
 TEST_DATA = pd.DataFrame(
     {"subject_id": ["test_1"] * N_DAYS, "study_day": range(N_DAYS), **FEATURES}
 )
@@ -14,7 +16,7 @@ TEST_DATA = pd.DataFrame(
 def test_input_output_base():
     test_data = TEST_DATA
     detector = ad.BaseRollingAnomalyDetector(
-        features=FEATURES.keys(),
+        features=list(FEATURES.keys()),
         window_size=3,
     )
     print(test_data)
@@ -83,14 +85,19 @@ def test_performance_metrics_perfect():
     with_anomalies["model_anomaly"] = 1
     groupby_cols = ["subject_id"]
 
-    metrics = ad.performance_metrics(
+    metrics = ad.binaryPerformanceMetrics(
         data=with_anomalies,
         anomaly_detector_cols=anomaly_detector_cols,
         groupby_cols=groupby_cols,
     )
     print(
         metrics[
-            ["false_positives", "false_negatives", "true_positives", "true_negatives"]
+            [
+                "false_positives",
+                "false_negatives",
+                "true_positives",
+                "true_negatives",
+            ]
         ]
     )
     print(
@@ -127,7 +134,7 @@ def test_performance_metrics_worse():
     with_anomalies["model_anomaly"] = 0
     groupby_cols = ["subject_id"]
 
-    metrics = ad.performance_metrics(
+    metrics = ad.binaryPerformanceMetrics(
         data=with_anomalies,
         anomaly_detector_cols=anomaly_detector_cols,
         groupby_cols=groupby_cols,
@@ -135,7 +142,12 @@ def test_performance_metrics_worse():
 
     print(
         metrics[
-            ["false_positives", "false_negatives", "true_positives", "true_negatives"]
+            [
+                "false_positives",
+                "false_negatives",
+                "true_positives",
+                "true_negatives",
+            ]
         ]
     )
     print(
@@ -164,10 +176,15 @@ def test_performance_metrics_mid():
     N_DAYS = 10
     N_FEATURES = 3
     FEATURES = {
-        f"example_feature_{i}": np.arange(N_DAYS) * i for i in range(N_FEATURES)
+        f"example_feature_{i}": np.arange(N_DAYS) * i
+        for i in range(N_FEATURES)
     }
     TEST_DATA = pd.DataFrame(
-        {"subject_id": ["test_1"] * N_DAYS, "study_day": range(N_DAYS), **FEATURES}
+        {
+            "subject_id": ["test_1"] * N_DAYS,
+            "study_day": range(N_DAYS),
+            **FEATURES,
+        }
     )
     with_anomalies = TEST_DATA.copy()
 
@@ -178,14 +195,19 @@ def test_performance_metrics_mid():
     with_anomalies["model_anomaly"] = 1
     groupby_cols = ["subject_id"]
 
-    metrics = ad.performance_metrics(
+    metrics = ad.binaryPerformanceMetrics(
         data=with_anomalies,
         anomaly_detector_cols=anomaly_detector_cols,
         groupby_cols=groupby_cols,
     )
     print(
         metrics[
-            ["false_positives", "false_negatives", "true_positives", "true_negatives"]
+            [
+                "false_positives",
+                "false_negatives",
+                "true_positives",
+                "true_negatives",
+            ]
         ]
     )
     print(
@@ -261,10 +283,15 @@ def test_distance_mid():
     N_DAYS = 10
     N_FEATURES = 3
     FEATURES = {
-        f"example_feature_{i}": np.arange(N_DAYS) * i for i in range(N_FEATURES)
+        f"example_feature_{i}": np.arange(N_DAYS) * i
+        for i in range(N_FEATURES)
     }
     TEST_DATA = pd.DataFrame(
-        {"subject_id": ["test_1"] * N_DAYS, "study_day": range(N_DAYS), **FEATURES}
+        {
+            "subject_id": ["test_1"] * N_DAYS,
+            "study_day": range(N_DAYS),
+            **FEATURES,
+        }
     )
     with_anomalies = TEST_DATA.copy()
 
@@ -296,10 +323,15 @@ def test_distance_one_detected():
     N_DAYS = 10
     N_FEATURES = 3
     FEATURES = {
-        f"example_feature_{i}": np.arange(N_DAYS) * i for i in range(N_FEATURES)
+        f"example_feature_{i}": np.arange(N_DAYS) * i
+        for i in range(N_FEATURES)
     }
     TEST_DATA = pd.DataFrame(
-        {"subject_id": ["test_1"] * N_DAYS, "study_day": range(N_DAYS), **FEATURES}
+        {
+            "subject_id": ["test_1"] * N_DAYS,
+            "study_day": range(N_DAYS),
+            **FEATURES,
+        }
     )
     with_anomalies = TEST_DATA.copy()
 

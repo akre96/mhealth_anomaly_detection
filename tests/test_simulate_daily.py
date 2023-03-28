@@ -181,7 +181,9 @@ def test_correlate_features_single():
         cache_simulation=False,
     )
     data = simulator.simulateData()
-    with_corr = simulator.addCorrelatedFeatures(data, n_feats=1, noise_scale=0.1)
+    with_corr = simulator.addCorrelatedFeatures(
+        data, n_feats=1, noise_scale=0.1
+    )
     print(data)
     print(with_corr)
     assert with_corr.subject_id.nunique() == 1

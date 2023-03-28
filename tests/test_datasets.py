@@ -33,7 +33,9 @@ def test_PHQ_periods():
         sensor_data_types=["wifi"],
     )
     print(sim_data)
-    periods = dataset.get_phq_periods(data=sim_data, features=["feat"], period=1)
+    periods = dataset.get_phq_periods(
+        data=sim_data, features=["feat"], period=1
+    )
     print(periods)
     assert periods.iloc[0].start == 0
     assert periods.shape[0] == (int(ndays / gap) - 1)
@@ -42,12 +44,15 @@ def test_PHQ_periods():
     sim_data = pd.DataFrame(
         {
             "subject_id": ["test"] * ndays,
-            "test_anomaly": [np.nan, np.nan, np.nan, np.nan, np.nan] * int(ndays / gap),
+            "test_anomaly": [np.nan, np.nan, np.nan, np.nan, np.nan]
+            * int(ndays / gap),
             "phq4": ([1] + [np.nan] * (gap - 1)) * int(ndays / gap),
             "feat": [0] * ndays,
             "study_day": range(ndays),
         }
     )
-    periods = dataset.get_phq_periods(data=sim_data, features=["feat"], period=1)
+    periods = dataset.get_phq_periods(
+        data=sim_data, features=["feat"], period=1
+    )
     print(periods)
     assert np.all(periods.test_anomaly.isna())

@@ -36,7 +36,9 @@ class GLOBEM(DatasetBase):
         load_data: bool = True,
     ):
         if year not in [2, 3, 4]:
-            raise ValueError("Year for the GLOBEM dataset analysis must be 2, 3, or 4")
+            raise ValueError(
+                "Year for the GLOBEM dataset analysis must be 2, 3, or 4"
+            )
 
         self.possible_sensor_types = [
             "wifi",
@@ -109,7 +111,9 @@ class GLOBEM(DatasetBase):
         sensors = self.get_daily_sensor_data()
         participants = self.get_participant_info()
 
-        participant_sensors = participants.merge(sensors, how="inner", validate="1:m")
+        participant_sensors = participants.merge(
+            sensors, how="inner", validate="1:m"
+        )
 
         data = participant_sensors.merge(
             surveys, how="outer", validate="1:1"
@@ -118,21 +122,33 @@ class GLOBEM(DatasetBase):
         return data
 
     def get_pre_post_surveys(self) -> pd.DataFrame:
-        pre_path = Path(self.data_path, f"INS-W_{self.year}", "SurveyData", "pre.csv")
+        pre_path = Path(
+            self.data_path, f"INS-W_{self.year}", "SurveyData", "pre.csv"
+        )
 
-        pre = pd.read_csv(pre_path, index_col=0).rename(columns={"date": "pre_date"})
+        pre = pd.read_csv(pre_path, index_col=0).rename(
+            columns={"date": "pre_date"}
+        )
         pre_col_names = [c.removesuffix("_PRE") for c in pre.columns]
 
-        post_path = Path(self.data_path, f"INS-W_{self.year}", "SurveyData", "post.csv")
+        post_path = Path(
+            self.data_path, f"INS-W_{self.year}", "SurveyData", "post.csv"
+        )
 
-        post = pd.read_csv(post_path, index_col=0).rename(columns={"date": "post_date"})
+        post = pd.read_csv(post_path, index_col=0).rename(
+            columns={"date": "post_date"}
+        )
         post_col_names = [c.removesuffix("_POST") for c in post.columns]
 
         prepost = pre.merge(post, how="inner", on="pid").rename(
             columns={"pid": "subject_id"}
         )
         for col in pre_col_names:
-            if col in post_col_names and col not in ["pid", "pre_date", "post_date"]:
+            if col in post_col_names and col not in [
+                "pid",
+                "pre_date",
+                "post_date",
+            ]:
                 prepost[f"{col}_CHANGE"] = (
                     prepost[f"{col}_POST"] - prepost[f"{col}_PRE"]
                 )
@@ -141,7 +157,10 @@ class GLOBEM(DatasetBase):
 
     def get_weekly_phq4(self) -> pd.DataFrame:
         weekly_survey_path = Path(
-            self.data_path, f"INS-W_{self.year}", "SurveyData", "dep_weekly.csv"
+            self.data_path,
+            f"INS-W_{self.year}",
+            "SurveyData",
+            "dep_weekly.csv",
         )
 
         return pd.read_csv(weekly_survey_path, index_col=0)[
@@ -167,7 +186,10 @@ class GLOBEM(DatasetBase):
 
     def get_participant_info(self) -> pd.DataFrame:
         info_path = Path(
-            self.data_path, f"INS-W_{self.year}", "ParticipantsInfoData", "platform.csv"
+            self.data_path,
+            f"INS-W_{self.year}",
+            "ParticipantsInfoData",
+            "platform.csv",
         )
         return pd.read_csv(info_path, index_col=0).reset_index()
 
@@ -277,7 +299,9 @@ class GLOBEM(DatasetBase):
                 "INS-W_756",
             ]
         else:
-            print("Warning: Filtering participants not established for year 1,3,4")
+            print(
+                "Warning: Filtering participants not established for year 1,3,4"
+            )
 
         print(
             f"Filtering high missing participants - removing",
@@ -303,7 +327,9 @@ class GLOBEM(DatasetBase):
                 )
                 continue
             missing_indicator = f"{var}_missing"
-            data[missing_indicator] = data[passive_feature_rep[var]].isna().astype(int)
+            data[missing_indicator] = (
+                data[passive_feature_rep[var]].isna().astype(int)
+            )
             self.feature_cols.append(missing_indicator)
 
         print(
@@ -313,7 +339,9 @@ class GLOBEM(DatasetBase):
 
     @staticmethod
     def get_phq_periods(data, features, period=1) -> pd.DataFrame:
-        anomaly_detector_cols = [d for d in data.columns if d.endswith("_anomaly")]
+        anomaly_detector_cols = [
+            d for d in data.columns if d.endswith("_anomaly")
+        ]
         if len(anomaly_detector_cols) == 0:
             raise ValueError("No anomaly detector columns")
 
@@ -356,7 +384,9 @@ class GLOBEM(DatasetBase):
             results_dict["start"].append(last_row["study_day"])
             results_dict["stop"].append(row["study_day"])
             results_dict["days"] = row["study_day"] - last_row["study_day"]
-            results_dict["complete_days"].append(anomalies[features].dropna().shape[0])
+            results_dict["complete_days"].append(
+                anomalies[features].dropna().shape[0]
+            )
             results_dict["phq_start"].append(last_row["phq4"])
             results_dict["phq_stop"].append(row["phq4"])
             results_dict["phq_change"].append(row["phq4"] - last_row["phq4"])
@@ -414,7 +444,9 @@ class CrossCheck(DatasetBase):
     ) -> pd.DataFrame:
         # -1 id seems to be a testing account, has many ~25 eureka ids
         reform_data = self.data_raw[self.data_raw.study_id != -1].copy()
-        reform_data["date"] = pd.to_datetime(reform_data["day"], format="%Y%m%d")
+        reform_data["date"] = pd.to_datetime(
+            reform_data["day"], format="%Y%m%d"
+        )
         reform_data["subject_id"] = reform_data["study_id"]
 
         # Exclude dates before the year 2000
@@ -439,7 +471,9 @@ class CrossCheck(DatasetBase):
             for c in self.behavior_cols
             if (c.startswith("sleep_") or c.startswith("act"))
         ]
-        reform_data.loc[(reform_data["quality_activity"] < 2), sleep_act_cols] = np.nan
+        reform_data.loc[
+            (reform_data["quality_activity"] < 2), sleep_act_cols
+        ] = np.nan
         reform_data.loc[
             (reform_data["quality_activity"].isnull()), sleep_act_cols
         ] = np.nan

@@ -213,14 +213,11 @@ if __name__ == "__main__":
         "anomaly_freq",
     ]
     corr, corr_table, performance_cont_df, performance_df = calcSimMetrics(
-        data_df,
-        key_difference=KEY_DIFFERENCE,
-        groupby_cols=groupby_cols
+        data_df, key_difference=KEY_DIFFERENCE, groupby_cols=groupby_cols
     )
 
     # PERFORMANCE CALCULATIONS
     print("Calculating Metrics...")
-
 
     # PLOTTING
     print("Plotting...")
@@ -265,13 +262,18 @@ if __name__ == "__main__":
             ax=ax,
         )
         fname = Path(out_dir, f"{metric}_heatmap_n{N_SUBJECTS}.png")
-        fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
+        fa.despine_thicken_axes(
+            ax, heatmap=True, fontsize=12, x_tick_fontsize=10
+        )
         plt.tight_layout()
         plt.gcf().savefig(str(fname))
         plt.close()
 
-
-    print(performance_cont_df.groupby("model").average_precision.describe().round(2))
+    print(
+        performance_cont_df.groupby("model")
+        .average_precision.describe()
+        .round(2)
+    )
 
     stop = time.perf_counter()
     print(f"\nCompleted in {(stop - start)/60:0.2f} minutes")

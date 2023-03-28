@@ -252,7 +252,9 @@ def update_code_within_radius(
         for k in np.arange(H1.shape[0]):
             grad = np.dot(A[k, :], H1) - B[k, :] + alpha * np.ones(H1.shape[1])
             # H1[k, :] = H1[k,:] - (1 / (A[k, k] + np.linalg.norm(grad, 2))) * grad
-            H1[k, :] = H1[k, :] - (1 / (((i + 10) ** (0.5)) * (A[k, k] + 1))) * grad
+            H1[k, :] = (
+                H1[k, :] - (1 / (((i + 10) ** (0.5)) * (A[k, k] + 1))) * grad
+            )
             # use i+10 to ensure monotonicity (but gets slower)
             H1[k, :] = np.maximum(
                 H1[k, :], np.zeros(shape=(H1.shape[1],))

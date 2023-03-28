@@ -178,7 +178,10 @@ if __name__ == "__main__":
                         }
                         for i in range(n_features - N_FEATURES_SIGNAL)
                     }
-                    run_parameters["feature_params"] = {**signal_params, **noise_params}
+                    run_parameters["feature_params"] = {
+                        **signal_params,
+                        **noise_params,
+                    }
                     run_parameters["param_name"] = "history_all_28"
                     run_parameters["window_size"] = window_size
                     run_list.append(run_parameters)
@@ -201,11 +204,14 @@ if __name__ == "__main__":
         data_df = pd.concat(datasets)
         data_df.to_csv(fpath, index=False)
 
-    groupby_cols = ["subject_id", KEY_DIFFERENCE, "window_size", "anomaly_freq"]
+    groupby_cols = [
+        "subject_id",
+        KEY_DIFFERENCE,
+        "window_size",
+        "anomaly_freq",
+    ]
     corr, corr_table, performance_cont_df, performance_df = calcSimMetrics(
-        data_df,
-        key_difference=KEY_DIFFERENCE,
-        groupby_cols=groupby_cols
+        data_df, key_difference=KEY_DIFFERENCE, groupby_cols=groupby_cols
     )
     # PERFORMANCE CALCULATIONS
     print("Calculating Metrics...")
@@ -229,8 +235,12 @@ if __name__ == "__main__":
             vmax=1,
             ax=ax,
         )
-        fname = Path("output", EXPERIMENT, f"{metric}_heatmap_n{N_SUBJECTS}.png")
-        fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
+        fname = Path(
+            "output", EXPERIMENT, f"{metric}_heatmap_n{N_SUBJECTS}.png"
+        )
+        fa.despine_thicken_axes(
+            ax, heatmap=True, fontsize=12, x_tick_fontsize=10
+        )
         plt.tight_layout()
         plt.gcf().savefig(str(fname))
         plt.close()

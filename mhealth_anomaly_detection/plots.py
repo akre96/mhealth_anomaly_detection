@@ -167,7 +167,9 @@ if __name__ == "__main__":
             data = pd.read_csv(f)
             for sid, subject_data in data.groupby("subject_id"):
                 subject_data = subject_data.reset_index()
-                subject_data["anomaly"] = anomalyDetector.labelAnomaly(subject_data)
+                subject_data["anomaly"] = anomalyDetector.labelAnomaly(
+                    subject_data
+                )
                 subject_data["total_re"] = np.nan
                 if not anomalyDetector.reconstruction_error.empty:
                     re = anomalyDetector.getReconstructionError(subject_data)
@@ -190,7 +192,9 @@ if __name__ == "__main__":
                         [
                             "total_re",
                             "ema_sad_choices",
-                            *all_feature_params[file_params["sim_type"]].keys(),
+                            *all_feature_params[
+                                file_params["sim_type"]
+                            ].keys(),
                         ],
                         palette=palette,
                     )

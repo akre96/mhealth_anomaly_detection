@@ -3,7 +3,12 @@ from pathlib import Path
 from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
-from mhealth_anomaly_detection import datasets, anomaly_detection, plots, load_refs
+from mhealth_anomaly_detection import (
+    datasets,
+    anomaly_detection,
+    plots,
+    load_refs,
+)
 
 if __name__ == "__main__":
     # Parameters
@@ -101,7 +106,8 @@ if __name__ == "__main__":
         }
         for detector_name, detector in detectors.items():
             for sid in tqdm(
-                plot_subjects, desc=f"{detector_name} anomaly detection plotting"
+                plot_subjects,
+                desc=f"{detector_name} anomaly detection plotting",
             ):
                 # Filename for figure
                 fname = Path(
@@ -135,7 +141,9 @@ if __name__ == "__main__":
 
                 if not detector.reconstruction_error.empty:
                     # Calculate reconstruction error
-                    reconstruction_error = detector.getReconstructionError(subject_data)
+                    reconstruction_error = detector.getReconstructionError(
+                        subject_data
+                    )
                     subject_data["total_re"] = reconstruction_error["total_re"]
 
                     plots.overlay_reconstruction_error(

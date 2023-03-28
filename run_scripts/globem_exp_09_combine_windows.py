@@ -66,9 +66,13 @@ def run_plots(inputs) -> None:
         f"\tUsing {len(features)} of {len(CHECK_MISSING_FEATURES)} features for checking missing days"
     )
     for period in [1, 2, 3]:
-        p_list.append(GLOBEM.get_phq_periods(exp_ad, features=features, period=period))
+        p_list.append(
+            GLOBEM.get_phq_periods(exp_ad, features=features, period=period)
+        )
     exp_comb = pd.concat(p_list)
-    anomaly_detector_cols = [d for d in exp_ad.columns if d.endswith("_anomaly")]
+    anomaly_detector_cols = [
+        d for d in exp_ad.columns if d.endswith("_anomaly")
+    ]
 
     print(f"\n\tPlotting to {out_dir}...")
     if not out_dir.exists():
@@ -112,7 +116,8 @@ def run_plots(inputs) -> None:
 
     print("\t\tPlotting correlation of detector to phq target")
     phq_anomalies_qc = exp_comb[
-        (exp_comb.days >= exp_comb.period * 6) & (exp_comb.days <= exp_comb.period * 8)
+        (exp_comb.days >= exp_comb.period * 6)
+        & (exp_comb.days <= exp_comb.period * 8)
     ]
     info_cols = [
         "subject_id",
@@ -134,9 +139,9 @@ def run_plots(inputs) -> None:
         if target == "phq_stop":
             fig, ax = plt.subplots(figsize=(3, 30))
             detector = "PCA_005_anomaly"
-            subset = corr[(corr.period == 1) & (corr.detector == detector)].sort_values(
-                by="rho"
-            )
+            subset = corr[
+                (corr.period == 1) & (corr.detector == detector)
+            ].sort_values(by="rho")
             subset["log10p"] = np.log10(subset["p"])
             subset["sig"] = subset["p"] < 0.05
             sns.barplot(
@@ -150,7 +155,9 @@ def run_plots(inputs) -> None:
             ax.set_xlim(-1, 1)
             ax.set_title(f"model: {detector}, period: {1}")
             ax.grid(axis="x", alpha=0.5, ls="dashed")
-            fname = Path(out_dir, f'individual_spearman{"rho"}_{target}_{detector}.png')
+            fname = Path(
+                out_dir, f'individual_spearman{"rho"}_{target}_{detector}.png'
+            )
             fa.despine_thicken_axes(ax, fontsize=10)
             plt.tight_layout()
             plt.gcf().savefig(str(fname))
@@ -158,18 +165,20 @@ def run_plots(inputs) -> None:
 
             # Plot top-2, middle, and bottom-2 performer
             p1_corr = corr[
-                (corr.period == 1) &
-                (~corr.detector.str.startswith('SVM'))
+                (corr.period == 1) & (~corr.detector.str.startswith("SVM"))
             ].sort_values(by="rho")
             inds = [0, 1, 2, 3, round(p1_corr.shape[0] / 2), -3, -2, -1]
-            p1_corr.iloc[inds].to_csv(Path(out_dir, f"example_subs.csv"), index=False)
+            p1_corr.iloc[inds].to_csv(
+                Path(out_dir, f"example_subs.csv"), index=False
+            )
             for ind in inds:
                 sid = p1_corr.iloc[ind]["subject_id"]
                 ad_col = p1_corr.iloc[ind]["detector"]
                 rho = p1_corr.iloc[ind]["rho"]
                 window_size = 7
                 subject_data = exp_ad[
-                    (exp_ad.subject_id == sid) & (exp_ad.window_size == window_size)
+                    (exp_ad.subject_id == sid)
+                    & (exp_ad.window_size == window_size)
                 ].copy()
                 subject_data[ad_col] = subject_data[ad_col].fillna(False)
                 _, axes = plots.lineplot_features(
@@ -186,9 +195,13 @@ def run_plots(inputs) -> None:
 
                     for ax in axes.flatten():
                         ylims = ax.get_ylim()
-                        ax.vlines(ads, *ylims, color=pal[i].hex_l, lw=4, alpha=0.5)
+                        ax.vlines(
+                            ads, *ylims, color=pal[i].hex_l, lw=4, alpha=0.5
+                        )
                         ax.set_ylim(*ylims)
-                fname = Path(out_dir, f"{sid}_{ad_col}_rho{round(rho, 2)}_top{ind}.png")
+                fname = Path(
+                    out_dir, f"{sid}_{ad_col}_rho{round(rho, 2)}_top{ind}.png"
+                )
                 fa.despine_thicken_axes(ax, fontsize=10)
                 plt.tight_layout()
                 plt.gcf().savefig(str(fname))
@@ -202,14 +215,19 @@ def run_plots(inputs) -> None:
         )
 
         sns.clustermap(vals, cmap=cmap, vmin=-1, vmax=1, figsize=(20, 20))
-        fname = Path(out_dir, f'individual_clustermap_spearman{"rho"}_{target}.png')
+        fname = Path(
+            out_dir, f'individual_clustermap_spearman{"rho"}_{target}.png'
+        )
         plt.tight_layout()
         plt.gcf().savefig(str(fname))
         plt.close()
 
         for metric in ["rho", "r2"]:
             corr_table = corr.pivot_table(
-                index=["detector"], columns=["period"], values=metric, aggfunc="median"
+                index=["detector"],
+                columns=["period"],
+                values=metric,
+                aggfunc="median",
             )
             hm_size = (10, 7)
             fig, ax = plt.subplots(figsize=hm_size)
@@ -220,13 +238,15 @@ def run_plots(inputs) -> None:
                 vmax=1,
                 square=True,
                 annot=corr_table.round(2),
-                linewidths=.5,
-                cbar_kws={'shrink': .5},
+                linewidths=0.5,
+                cbar_kws={"shrink": 0.5},
                 cmap=cmap,
                 ax=ax,
             )
             fname = Path(out_dir, f"spearman{metric}_{target}_heatmap.png")
-            fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
+            fa.despine_thicken_axes(
+                ax, heatmap=True, fontsize=12, x_tick_fontsize=10
+            )
             plt.tight_layout()
             plt.gcf().savefig(str(fname))
             plt.close()
@@ -257,7 +277,9 @@ def run_plots(inputs) -> None:
             plt.subplots_adjust(wspace=0.6)
             ns = corr[corr.p > 0.05]
             sig = corr[corr.p < 0.05]
-            p_transparent = {m: Color(c).get_rgb() for m, c in palette["model"].items()}
+            p_transparent = {
+                m: Color(c).get_rgb() for m, c in palette["model"].items()
+            }
             for i, metric in enumerate(["rho", "r2"]):
                 ax = axes[i]
                 sns.stripplot(
@@ -296,9 +318,9 @@ def run_plots(inputs) -> None:
                 fa.despine_thicken_axes(ax, fontsize=15)
                 ax.legend().remove()
                 ax.set_xlabel("Spearman Rho")
-                corr.groupby("model")[["rho", "r2"]].describe().round(3).to_csv(
-                    Path(out_dir, f"{target}_corr_model_summary.csv")
-                )
+                corr.groupby("model")[["rho", "r2"]].describe().round(
+                    3
+                ).to_csv(Path(out_dir, f"{target}_corr_model_summary.csv"))
             ax.set_ylabel("")
             ax.set_xlabel("R-squared")
 

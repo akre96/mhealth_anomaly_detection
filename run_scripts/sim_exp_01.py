@@ -49,14 +49,14 @@ NUM_CPUS = 10
 N_SUBJECTS = 100
 DAYS_OF_DATA = 120
 FREQUENCIES = [2, 7, 14, 28]
-WINDOW_SIZES = [7, 14, 28]  
+WINDOW_SIZES = [7, 14, 28]
 N_FEATURES = 5
 KEY_DIFFERENCE = "history_type"
 
 if DEBUG:
     N_SUBJECTS = 2
     FREQUENCIES = [2, 7]
-    WINDOW_SIZES = [28] 
+    WINDOW_SIZES = [28]
     USE_CACHE = False
     PARALLEL = False
 
@@ -155,8 +155,7 @@ def run_ad_on_simulated(
                 subject_data, recalc_re=True
             )
             subject_data[f"{dname}_anomaly"] = detector.labelAnomaly(
-                subject_data,
-                recalc_re=False
+                subject_data, recalc_re=False
             )
         return subject_data.set_index(index_cols)
 
@@ -243,7 +242,7 @@ if __name__ == "__main__":
         # Don't parallel process
         datasets = []
         for i, run_params in tqdm(enumerate(run_list)):
-            print(f'Running {i+1} of {len(run_list)}')
+            print(f"Running {i+1} of {len(run_list)}")
             datasets.append(run_ad_on_simulated(**run_params))
 
         data_df = pd.concat(datasets)
@@ -256,11 +255,9 @@ if __name__ == "__main__":
         "n_features",
         "anomaly_freq",
     ]
-    
+
     corr, corr_table, performance_cont_df, performance_df = calcSimMetrics(
-        data_df,
-        key_difference=KEY_DIFFERENCE,
-        groupby_cols=groupby_cols
+        data_df, key_difference=KEY_DIFFERENCE, groupby_cols=groupby_cols
     )
     # PLOTTING
     print("Plotting...")
@@ -305,7 +302,9 @@ if __name__ == "__main__":
             ax=ax,
         )
         fname = Path(out_dir, f"{metric}_heatmap_n{N_SUBJECTS}.png")
-        fa.despine_thicken_axes(ax, heatmap=True, fontsize=12, x_tick_fontsize=10)
+        fa.despine_thicken_axes(
+            ax, heatmap=True, fontsize=12, x_tick_fontsize=10
+        )
         plt.tight_layout()
         plt.gcf().savefig(str(fname))
         plt.close()

@@ -5,9 +5,16 @@ from mhealth_anomaly_detection import anomaly_detection
 
 
 def calcSimMetrics(data_df: pd.DataFrame, key_difference, groupby_cols):
-    anomaly_detector_cols = [d for d in data_df.columns if d.endswith("_anomaly")]
-    anomaly_detector_cont_cols = [d for d in data_df.columns if d.endswith("_anomaly_score")]
-    print(f"Comparing across {key_difference}: ", data_df[key_difference].unique())
+    anomaly_detector_cols = [
+        d for d in data_df.columns if d.endswith("_anomaly")
+    ]
+    anomaly_detector_cont_cols = [
+        d for d in data_df.columns if d.endswith("_anomaly_score")
+    ]
+    print(
+        f"Comparing across {key_difference}: ",
+        data_df[key_difference].unique(),
+    )
 
     # PERFORMANCE CALCULATIONS
     print("Calculating Metrics...")

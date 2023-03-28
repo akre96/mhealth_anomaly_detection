@@ -61,7 +61,9 @@ class BaseDailyDataSimulator:
         for feature, params in self.feature_params.items():
             for i in range(n_feats):
                 f_name = f"{feature}_relu_{i}"
-                data_added[f_name] = data[feature] * (data[feature] > params["mean"])
+                data_added[f_name] = data[feature] * (
+                    data[feature] > params["mean"]
+                )
                 self.added_features.append(f_name)
         return data_added
 
@@ -130,7 +132,9 @@ class BaseDailyDataSimulator:
         sad_ema = norm_features[list(self.feature_params.keys())].sum(axis=1)
 
         # daily depressed mood is a simple summation scaled between 0 and 3
-        sad_ema = 3 * ((sad_ema - sad_ema.min()) / (sad_ema.max() - sad_ema.min()))
+        sad_ema = 3 * (
+            (sad_ema - sad_ema.min()) / (sad_ema.max() - sad_ema.min())
+        )
         sad_ema[sad_ema > 3] = 3
         sad_ema = np.round(sad_ema)
         return sad_ema
@@ -244,7 +248,9 @@ class RandomAnomalySimulator(BaseDailyDataSimulator):
             if ("anomaly_frequency" not in params.keys()) or (
                 "anomaly_std_scale" not in params.keys()
             ):
-                raise ValueError(feature + " Anomaly frequency and scale not specified")
+                raise ValueError(
+                    feature + " Anomaly frequency and scale not specified"
+                )
 
     def generateSubjectData(
         self,
