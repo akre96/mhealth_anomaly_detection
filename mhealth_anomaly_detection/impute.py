@@ -2,9 +2,16 @@ from tqdm.auto import tqdm
 import pandas as pd
 import numpy as np
 from p_tqdm import p_map
+from typing import List, Any
 
 
-def rollingImpute(data, features, min_days, imputer, num_cpus) -> pd.DataFrame:
+def rollingImpute(
+        data: pd.DataFrame,
+        features: List[str],
+        min_days: int,
+        imputer: Any,
+        num_cpus: int,
+    ) -> pd.DataFrame:
     def impute(input) -> pd.DataFrame:
         _, data = input
         filled_data = np.full((data.shape[0], len(features)), np.nan)

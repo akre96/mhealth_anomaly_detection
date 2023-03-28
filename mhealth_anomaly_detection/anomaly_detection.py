@@ -3,7 +3,7 @@ from numpy.typing import ArrayLike, NDArray
 from typing import List
 import pandas as pd
 from tqdm.auto import tqdm
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, NMF
 from sklearn.ensemble import IsolationForest
 from sklearn.svm import OneClassSVM
 from sklearn.preprocessing import RobustScaler
@@ -14,6 +14,7 @@ from mhealth_anomaly_detection.onmf import Online_NMF
 
 
 # Base detector takes rolling mean of window size per feature
+# TODO: Code removal of past anomalies while calculating rolling mean
 class BaseRollingAnomalyDetector:
     def __init__(
         self,
@@ -21,6 +22,7 @@ class BaseRollingAnomalyDetector:
         window_size: int = 7,
         max_missing_days: int = 2,
         re_std_threshold: float = 2.0,
+        remove_past_anomalies: bool = False,
     ):
         self.window_size = window_size
         self.max_missing_days = max_missing_days
@@ -28,6 +30,7 @@ class BaseRollingAnomalyDetector:
         self.re_std_threshold = re_std_threshold
         self.reconstruction_error: pd.DataFrame = pd.DataFrame()
         self.name = "RollingMean"
+        self.remove_past_anomalies = remove_past_anomalies
 
     @staticmethod
     def validateInputData(subject_data: pd.DataFrame) -> None:
@@ -137,6 +140,7 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                 ("pca", PCA(n_components=n_components, whiten=True)),
             ]
         )
+        self.named_step = 'pca'
         str_nc = str(n_components)
         if n_components < 10:
             str_nc = f"00{str_nc}"
@@ -180,7 +184,7 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                     continue
 
                 self.model.fit(train[self.features])
-                pca_components[i, :, :] = self.model.named_steps["pca"].components_
+                pca_components[i, :, :] = self.model.named_steps[self.named_step].components_
 
                 # Training set + next day
                 X = subject_data.iloc[i - self.window_size : i + 1][self.features]
@@ -212,6 +216,32 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
         self.reconstruction_error = re_df
 
         return re_df
+
+class NMFRollingAnomalyDetector(PCARollingAnomalyDetector):
+    def __init__(
+        self,
+        features: list,
+        window_size: int = 7,
+        max_missing_days: int = 2,
+        n_components: int = 3,
+        re_std_threshold: float = 2.0,
+    ):
+        super().__init__(features, window_size, max_missing_days, n_components, re_std_threshold)
+        self.model = Pipeline(
+            [
+                ("scaler", RobustScaler()),
+                ("nmf", NMF(n_components=n_components)),
+            ]
+        )
+        str_nc = str(n_components)
+        self.named_step = 'nmf'
+
+        if n_components < 10:
+            str_nc = f"00{str_nc}"
+        elif n_components < 100:
+            str_nc = f"0{str_nc}"
+
+        self.name = "NMF" + "_" + str_nc
 
 
 class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
@@ -271,98 +301,6 @@ class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
 
     def getContinuous(self, subject_data, **kwargs) -> NDArray:
         return self.labelAnomaly(subject_data, continuous=True)
-
-
-# TODO: Refactor with SK-learn implementation
-class NMFRollingAnomalyDetector(BaseRollingAnomalyDetector):
-    def __init__(
-        self,
-        features: list,
-        window_size: int = 7,
-        max_missing_days: int = 2,
-        n_components: int = 3,
-        re_std_threshold: float = 2.0,
-    ):
-        super().__init__(features, window_size, max_missing_days, re_std_threshold)
-        self.n_components = n_components
-        self.window_size = window_size
-        self.max_missing_days = max_missing_days
-        self.features = features
-
-        str_nc = str(n_components)
-        if n_components < 10:
-            str_nc = f"00{str_nc}"
-        elif n_components < 100:
-            str_nc = f"0{str_nc}"
-
-        self.name = "NMF" + "_" + str_nc
-
-    def getReconstructionError(
-        self,
-        subject_data: pd.DataFrame,
-    ) -> pd.DataFrame:
-        self.validateInputData(subject_data)
-        # Sort values
-        subject_data = subject_data.sort_values(by="study_day")
-
-        # initialize columns names with features + _re
-        df_cols = ["{}_re".format(feature) for feature in self.features]
-
-        # empty df with null values to place RE in to
-        re_df = pd.DataFrame(
-            data=np.full((subject_data.shape[0], len(df_cols)), np.nan),
-            columns=df_cols,
-            index=subject_data.index,
-        )
-        nmf_components = np.full(
-            (subject_data.shape[0], len(df_cols), self.n_components), np.nan
-        )
-
-        # Calculate reconstruction error for each day
-        for i in range(subject_data.shape[0]):
-            # RE only calculated with sufficient historical data
-            if i > (self.window_size):
-                # Train on window_size days
-                train = subject_data.iloc[i - self.window_size : i].dropna(
-                    subset=self.features
-                )[self.features]
-                if train.shape[0] < (self.window_size - self.max_missing_days):
-                    continue
-
-                scaler = RobustScaler()
-                scaler.fit(train)
-                model = Online_NMF(
-                    scaler.transform(train).T,
-                    n_components=self.n_components,
-                    iterations=10,
-                    batch_size=round(self.window_size / 2),
-                )
-                W = model.train_dict()
-                nmf_components[i, :, :] = W
-
-                # Training set + next day reconstructed
-                X = scaler.transform(
-                    subject_data.iloc[i - self.window_size : i + 1][
-                        self.features
-                    ].dropna()
-                ).T
-                H = model.sparse_code(X, W)
-                reconstruction = W @ H
-
-                # Reconstruction error for out-of-training day kept
-                re_df.iloc[i] = (np.abs(X - reconstruction).T)[-1]
-
-        # Clip reconstruction error to 10
-        re_df[re_df > 10] = 10
-
-        re_df["total_re"] = (re_df).sum(axis=1, min_count=1)
-        re_df["study_day"] = subject_data["study_day"]
-
-        # Store pca components in detector class
-        self.components: ArrayLike = nmf_components
-        self.reconstruction_error = re_df
-
-        return re_df
 
 
 class IFRollingAnomalyDetector(SVMRollingAnomalyDetector):
