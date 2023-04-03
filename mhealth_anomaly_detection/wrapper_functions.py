@@ -35,7 +35,7 @@ def calcSimMetrics(data_df: pd.DataFrame, key_difference, groupby_cols):
     )
 
     # Calculate accuracy, sensitivity, specificity
-    print("\t Average precision")
+    print("\tAverage precision")
     performance_cont_df = anomaly_detection.continuousPerformanceMetrics(
         data=data_df,
         groupby_cols=groupby_cols,

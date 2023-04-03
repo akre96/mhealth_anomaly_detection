@@ -1,23 +1,17 @@
-"""_summary_ Experiment 05: Are curated featuers better for AD?
+"""_summary_ Experiment 04: How do different anomaly detectors perform at detecting change 
+in mental health scores (PHQ-4) from the GLOBEM year 2 dataset
 _author_ Samir Akre <sakre@g.ucla.edu>
 
 This work looks at the correlation between detected anomalies and change in 
 PHQ-4 score on the year 2 GLOBEM dataset. This looks at 192 subjects daily
-sleep data exclusively.
+sleep, location, call, and physical activity data with MICE imputation.
 
 Output: heatmap of correlation of PHQ-4 change to detected
 anomalies. 
 """
-import sys
-
-# Make imports work
-# TODO: Remove this dependency -- worked fine when using poetry, but not just python3
-sys.path.insert(0, "/Users/sakre/Code/dgc/mhealth_anomaly_detection")
-
 import time
 import pandas as pd
 import numpy as np
-import scipy.stats as stats
 from p_tqdm import p_map
 from pathlib import Path
 from itertools import product
@@ -39,7 +33,7 @@ from mhealth_anomaly_detection import format_axis as fa
 DEBUG = False
 
 PARALLEL = True
-USE_CACHE = False
+USE_CACHE = True
 USE_CACHE_INTERMEDIATE = False
 
 # Ignore divide by 0 error -> expected and happens in PCA
@@ -48,39 +42,23 @@ np.seterr(divide="ignore", invalid="ignore")
 # Meta params
 NUM_CPUS = 10
 MAX_MISSING_DAYS = 2
-EXPERIMENT = "exp06"
+EXPERIMENT = "exp01"
 
 # Dataset Parameters
-YEAR = 2
+YEAR = 3
 SENSOR_TYPES = ["sleep", "steps", "location", "call"]
-FEATURES = [
-    "f_loc:phone_locations_doryab_locationentropy:allday",
-    "f_loc:phone_locations_barnett_circdnrtn:allday",
-    "f_steps:fitbit_steps_intraday_rapids_sumsteps:allday",
-    "f_steps:fitbit_steps_intraday_rapids_sumdurationactivebout:allday",
-    "f_slp:fitbit_sleep_intraday_rapids_sumdurationasleepunifiedmain:allday",
-    "f_slp:fitbit_sleep_intraday_rapids_countepisodeasleepunifiedmain:allday",
-    "f_slp:fitbit_sleep_summary_rapids_firstbedtimemain:allday",
-    "f_slp:fitbit_sleep_summary_rapids_avgefficiencymain:allday",
-    "f_call:phone_calls_rapids_missed_count:allday",
-    "f_call:phone_calls_rapids_incoming_count:allday",
-    "f_call:phone_calls_rapids_outgoing_count:allday",
-    "f_call:phone_calls_rapids_outgoing_sumduration:allday",
-    "sleep_missing",
-    "steps_missing",
-    "location_missing",
-    "call_missing",
-]
 MIN_DAYS = 7
 
 # Detector parameters
 WINDOW_SIZES = [7, 14, 28]
 ANOMALY_PERIODS = [1, 2, 3]
-N_COMPONENTS = [3, 5, 10]
+N_PARAMS = 4
+N_COMPONENTS = [3, 5, 10, 20]
 KERNELS = ["poly", "rbf", "sigmoid"]
 
 # Debugging
 if DEBUG:
+    N_PARAMS = 1
     WINDOW_SIZES = [7, 14]
     ANOMALY_PERIODS = [2]
     N_COMPONENTS = [3]
@@ -88,7 +66,6 @@ if DEBUG:
     USE_CACHE = False
     USE_CACHE_INTERMEDIATE = False
 
-N_PARAMS = max([len(N_COMPONENTS), len(KERNELS)])
 
 if __name__ == "__main__":
     start = time.perf_counter()
@@ -122,7 +99,7 @@ if __name__ == "__main__":
         if DEBUG:
             use_ids = data.subject_id.unique()[:10]
             data = data[data.subject_id.isin(use_ids)]
-        features = FEATURES
+        features = dataset.sensor_cols
         # Load data
         if not (USE_CACHE_INTERMEDIATE and inter_fpath.exists()):
             ## Impute data
@@ -150,9 +127,7 @@ if __name__ == "__main__":
                 if i_param == 0:
                     detectors.append(base_detector)
 
-                if i_param < len(N_COMPONENTS) and (
-                    N_COMPONENTS[i_param] < window_size
-                ):
+                if N_COMPONENTS[i_param] < window_size:
                     detectors.append(
                         anomaly_detection.PCARollingAnomalyDetector(
                             features=features,
@@ -279,33 +254,31 @@ if __name__ == "__main__":
             outcome_col=target,
             groupby_cols=info_cols,
         )
-        corr["r2"] = corr["rho"] ** 2
-        for metric in ["rho", "r2"]:
-            corr_table = corr.pivot_table(
-                index=["detector"],
-                columns=["window_size", "period"],
-                values="rho",
-                aggfunc="median",
-            )
-            hm_size = (10, 7)
-            fig, ax = plt.subplots(figsize=hm_size)
-            sns.heatmap(
-                corr_table,
-                center=0,
-                vmin=-1,
-                vmax=1,
-                square=True,
-                annot=True,
-                cmap="coolwarm",
-                ax=ax,
-            )
-            fname = Path(out_dir, f"spearmanr_{metric}_{target}_heatmap.png")
-            fa.despine_thicken_axes(
-                ax, heatmap=True, fontsize=12, x_tick_fontsize=10
-            )
-            plt.tight_layout()
-            plt.gcf().savefig(str(fname))
-            plt.close()
+        corr_table = corr.pivot_table(
+            index=["detector"],
+            columns=["window_size", "period"],
+            values="rho",
+            aggfunc="median",
+        )
+        hm_size = (10, 7)
+        fig, ax = plt.subplots(figsize=hm_size)
+        sns.heatmap(
+            corr_table,
+            center=0,
+            vmin=-1,
+            vmax=1,
+            square=True,
+            annot=True,
+            cmap="coolwarm",
+            ax=ax,
+        )
+        fname = Path(out_dir, f"spearmanr_{target}_heatmap.png")
+        fa.despine_thicken_axes(
+            ax, heatmap=True, fontsize=12, x_tick_fontsize=10
+        )
+        plt.tight_layout()
+        plt.gcf().savefig(str(fname))
+        plt.close()
 
     stop = time.perf_counter()
     print(f"\nCompleted in {(stop - start)/60:0.2f} minutes")

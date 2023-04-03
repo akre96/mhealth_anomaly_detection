@@ -18,11 +18,6 @@ Output: heatmap of correlation of frequency induced anomalies to detected
 anomalies. heatmap of average (mean/median) distance from true anomalies to 
 detected anomalies.
 """
-import sys
-
-# Make imports work
-# TODO: Remove this dependency -- worked fine when using poetry, but not just python3
-sys.path.insert(0, "/Users/sakre/Code/dgc/mhealth_anomaly_detection")
 
 import time
 import pandas as pd
@@ -41,7 +36,7 @@ from mhealth_anomaly_detection.wrapper_functions import calcSimMetrics
 DEBUG = False
 
 EXPERIMENT = "exp01"
-USE_CACHE = False
+USE_CACHE = True
 PARALLEL = True
 NUM_CPUS = 10
 
@@ -287,10 +282,19 @@ if __name__ == "__main__":
     plt.close()
 
     # Plot performance metrics per condition
-    for metric in ["accuracy", "sensitivity", "specificity", "F1"]:
+    for metric in [
+        "accuracy",
+        "sensitivity",
+        "specificity",
+        "F1",
+        "average_precision",
+    ]:
         fig, ax = plt.subplots(figsize=hm_size)
+        use_df = performance_df
+        if metric == "average_precision":
+            use_df = performance_cont_df
         sns.heatmap(
-            performance_df.pivot_table(
+            use_df.pivot_table(
                 values=metric,
                 columns=["anomaly_freq", "window_size"],
                 index=["model", KEY_DIFFERENCE],
@@ -310,7 +314,11 @@ if __name__ == "__main__":
         plt.close()
 
     print("Overall F1 by model")
-    print(performance_df.groupby("model").F1.describe().round(2))
+    print(
+        performance_cont_df.groupby("model")
+        .average_precision.describe()
+        .round(2)
+    )
 
     stop = time.perf_counter()
     print(f"\nCompleted in {(stop - start)/60:0.2f} minutes")

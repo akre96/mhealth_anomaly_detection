@@ -5,7 +5,8 @@ import numpy as np
 N_DAYS = 10
 N_FEATURES = 3
 FEATURES = {
-    f"example_feature_{i}": np.arange(N_DAYS) * i for i in range(N_FEATURES)
+    f"example_feature_{i}": 1 + np.arange(N_DAYS) * i
+    for i in range(N_FEATURES)
 }
 TEST_DATA = pd.DataFrame(
     {"subject_id": ["test_1"] * N_DAYS, "study_day": range(N_DAYS), **FEATURES}
@@ -14,7 +15,7 @@ TEST_DATA = pd.DataFrame(
 
 # Test that base detector outputs expected type and shape
 def test_input_output_base():
-    test_data = TEST_DATA
+    test_data = TEST_DATA.copy()
     detector = ad.BaseRollingAnomalyDetector(
         features=list(FEATURES.keys()),
         window_size=3,
@@ -29,7 +30,7 @@ def test_input_output_base():
 # Input data cannot be missing full row for a day
 def test_input_output_base_missing_day():
     # drop a day of data
-    test_data = TEST_DATA.drop(2)
+    test_data = TEST_DATA.copy().drop(2)
 
     error = False
     try:
@@ -42,6 +43,20 @@ def test_input_output_base_missing_day():
         error = True
 
     assert error
+
+
+def test_input_output_base_remove_anom():
+    test_data = TEST_DATA
+    detector = ad.BaseRollingAnomalyDetector(
+        features=list(FEATURES.keys()),
+        window_size=3,
+        remove_past_anomalies=True,
+    )
+    print(test_data)
+    re_df = detector.getReconstructionError(test_data)
+
+    # in re_df expect 2 column + 1 column per feature
+    assert re_df.shape == (N_DAYS, N_FEATURES + 2)
 
 
 def test_input_output_pc_methods_na_value():

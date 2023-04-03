@@ -1,11 +1,5 @@
 """ For exp 4,5,6 -- plot results combining window sizes
 """
-import sys
-
-# Make imports work
-# TODO: Remove this dependency -- worked fine when using poetry, but not just python3
-sys.path.insert(0, "/Users/sakre/Code/dgc/mhealth_anomaly_detection")
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,8 +15,8 @@ from mhealth_anomaly_detection import load_refs as lr
 from mhealth_anomaly_detection import plots
 
 YEARS = [2, 3]
-EXPERIMENTS = ["exp04", "exp05", "exp06"]
-EXPERIMENTS = ["exp06"]
+EXPERIMENTS = ["exp01", "exp02", "exp03"]
+EXPERIMENTS = ["exp03"]
 GLOBEM = datasets.GLOBEM(load_data=False, data_path="~/")
 CACHE_DIR = "cache"
 PARALLEL = False

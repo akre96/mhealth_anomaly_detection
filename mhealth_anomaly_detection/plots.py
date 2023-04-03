@@ -22,6 +22,7 @@ def lineplot_features(
     scatter: bool = False,
     hue: str = None,
 ) -> Tuple[Figure, Axes]:
+    data = data.copy()
     if palette is None:
         palette = lr.get_colors()
 
@@ -45,17 +46,16 @@ def lineplot_features(
         else:
             color = palette["features"][f]
 
-        data.loc[f] = pd.to_numeric(data[f], errors="coerce")
-        data.loc[time_col] = pd.to_numeric(data[time_col], errors="coerce")
+        subset = data[[f, time_col]].dropna(subset=[f, time_col])
         kwargs = {
-            "x": data.dropna(subset=[f])[time_col],
-            "y": data.dropna(subset=[f])[f].astype(float),
+            "x": subset[time_col],
+            "y": subset[f].astype(float),
             "color": color,
             "ax": ax,
         }
 
         if hue is not None:
-            kwargs["hue"] = data[hue]
+            kwargs["hue"] = data.dropna(subset=[f, time_col])[hue]
             kwargs.pop("color")
 
         # Weird matplotlib error around datatypes
@@ -114,6 +114,7 @@ def overlay_reconstruction_error(
                 alpha=0.5,
                 data=reconstruction_error,
             )
+            sns.despine(ax=ax)
         except TypeError:
             sns.despine(ax=ax)
             continue

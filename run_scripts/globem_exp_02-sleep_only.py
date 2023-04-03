@@ -1,24 +1,16 @@
-"""_summary_ Experiment 04: How do different anomaly detectors perform at detecting change 
-in mental health scores (PHQ-4) from the GLOBEM year 2 dataset
+"""_summary_ Experiment 05: Are curated featuers better for AD?
 _author_ Samir Akre <sakre@g.ucla.edu>
 
 This work looks at the correlation between detected anomalies and change in 
 PHQ-4 score on the year 2 GLOBEM dataset. This looks at 192 subjects daily
-sleep, location, call, and physical activity data with MICE imputation.
+sleep data exclusively.
 
 Output: heatmap of correlation of PHQ-4 change to detected
 anomalies. 
 """
-import sys
-
-# Make imports work
-# TODO: Remove this dependency -- worked fine when using poetry, but not just python3
-sys.path.insert(0, "/Users/sakre/Code/dgc/mhealth_anomaly_detection")
-
 import time
 import pandas as pd
 import numpy as np
-import scipy.stats as stats
 from p_tqdm import p_map
 from pathlib import Path
 from itertools import product
@@ -40,7 +32,7 @@ from mhealth_anomaly_detection import format_axis as fa
 DEBUG = False
 
 PARALLEL = True
-USE_CACHE = True
+USE_CACHE = False
 USE_CACHE_INTERMEDIATE = False
 
 # Ignore divide by 0 error -> expected and happens in PCA
@@ -49,11 +41,11 @@ np.seterr(divide="ignore", invalid="ignore")
 # Meta params
 NUM_CPUS = 10
 MAX_MISSING_DAYS = 2
-EXPERIMENT = "exp04"
+EXPERIMENT = "exp02"
 
 # Dataset Parameters
 YEAR = 3
-SENSOR_TYPES = ["sleep", "steps", "location", "call"]
+SENSOR_TYPES = ["sleep"]
 MIN_DAYS = 7
 
 # Detector parameters
@@ -288,4 +280,4 @@ if __name__ == "__main__":
         plt.close()
 
     stop = time.perf_counter()
-    print(f"\nCompleted in {(stop - start)/60:0.2f} minutes")
+    print(f"\nCompleted in {stop - start:0.2f} seconds")

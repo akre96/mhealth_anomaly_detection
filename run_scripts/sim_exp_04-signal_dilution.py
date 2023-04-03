@@ -27,7 +27,7 @@ from mhealth_anomaly_detection import anomaly_detection
 from mhealth_anomaly_detection import format_axis as fa
 from mhealth_anomaly_detection.wrapper_functions import calcSimMetrics
 
-EXPERIMENT = "exp07"
+EXPERIMENT = "exp04"
 USE_CACHE = False
 PARALLEL = True
 NUM_CPUS = 6

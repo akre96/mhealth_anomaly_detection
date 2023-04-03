@@ -1,6 +1,6 @@
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
-from typing import List
+from typing import List, Literal
 import pandas as pd
 from tqdm.auto import tqdm
 from sklearn.decomposition import PCA, NMF
@@ -13,7 +13,6 @@ import scipy.stats as stats
 
 
 # Base detector takes rolling mean of window size per feature
-# TODO: Code removal of past anomalies while calculating rolling mean
 class BaseRollingAnomalyDetector:
     def __init__(
         self,
@@ -30,6 +29,7 @@ class BaseRollingAnomalyDetector:
         self.reconstruction_error: pd.DataFrame = pd.DataFrame()
         self.name = "RollingMean"
         self.remove_past_anomalies = remove_past_anomalies
+        self.scaler = StandardScaler()
 
     @staticmethod
     def validateInputData(subject_data: pd.DataFrame) -> None:
@@ -55,7 +55,7 @@ class BaseRollingAnomalyDetector:
         self.validateInputData(subject_data)
 
         # Sort values
-        subject_data = subject_data.sort_values(by="study_day")
+        subject_data = subject_data.sort_values(by="study_day").copy()
 
         # initialize columns names with features + _re
         df_cols = ["{}_re".format(feature) for feature in self.features]
@@ -67,23 +67,84 @@ class BaseRollingAnomalyDetector:
             index=subject_data.index,
         )
 
-        # reconstruction as rolling window_size mean
-        reconstruction = (
-            subject_data[self.features]
-            .rolling(
-                window=self.window_size,
-                min_periods=self.window_size - self.max_missing_days,
+        if self.remove_past_anomalies:
+            # Calculate reconstruction error for each day
+            subject_data["anomaly_label"] = np.zeros(
+                subject_data.shape[0]
+            ).astype(bool)
+            for i in range(subject_data.shape[0]):
+                # RE only calculated with sufficient historical data
+                if i > (self.window_size):
+                    # Train on window_size days
+                    train = subject_data.iloc[i - self.window_size : i].dropna(
+                        subset=self.features
+                    )
+                    train = train[~train["anomaly_label"]]
+                    self.scaler.fit(train[self.features])
+
+                    if train.shape[0] < (
+                        self.window_size - self.max_missing_days
+                    ):
+                        continue
+
+                    train[self.features] = train[self.features]
+                    # Training set + next day
+                    X = pd.DataFrame(
+                        self.scaler.transform(
+                            subject_data.iloc[i - self.window_size : i + 1][
+                                self.features
+                            ]
+                        )
+                    )
+
+                    reconstruction = (
+                        pd.DataFrame(
+                            self.scaler.transform(train[self.features])
+                        )
+                        .rolling(
+                            window=self.window_size,
+                            min_periods=self.window_size
+                            - self.max_missing_days,
+                        )
+                        .mean()
+                    )
+                    # Reconstruction error for out-of-training day kept
+                    re_df.iloc[i] = np.abs(
+                        reconstruction.iloc[-1] - X.iloc[-1]
+                    )
+
+                    # Clip reconstruction error to 10
+                    re_df[re_df > 10] = 10
+                    total_re = re_df[df_cols].copy().sum(axis=1, min_count=1)
+                    use_re = total_re[
+                        (total_re.index >= (i - self.window_size))
+                        & (total_re.index <= i)
+                        & (~subject_data["anomaly_label"])
+                    ]
+                    subject_data["anomaly_label"].iloc[
+                        i
+                    ] = self.anomalyDecision(use_re)
+
+        else:
+            # reconstruction as rolling window_size mean
+            reconstruction = (
+                subject_data[self.features]
+                .rolling(
+                    window=self.window_size,
+                    min_periods=self.window_size - self.max_missing_days,
+                    closed="left",
+                )
+                .mean()
             )
-            .mean()
-        )
+            re_df[df_cols] = (
+                (subject_data[self.features] - reconstruction) / reconstruction
+            ).abs()
 
-        re_df[df_cols] = (
-            (subject_data[self.features] - reconstruction) / reconstruction
-        ).abs()
+            # Clip reconstruction error to 10
+            re_df[re_df > 10] = 10
 
-        # Clip reconstruction error to 10
-        re_df[re_df > 10] = 10
-        re_df["total_re"] = re_df.sum(axis=1, min_count=1)
+        re_df["total_re"] = re_df[df_cols].sum(axis=1, min_count=1)
+
         re_df["study_day"] = subject_data["study_day"]
         self.reconstruction_error = re_df
         return re_df
@@ -94,6 +155,20 @@ class BaseRollingAnomalyDetector:
             re_df = self.getReconstructionError(subject_data)
 
         return re_df["total_re"]
+
+    def anomalyDecision(self, continuous_output: pd.Series) -> bool:
+        anomaly_threshold = (
+            continuous_output.rolling(
+                window=self.window_size,
+                min_periods=self.window_size - self.max_missing_days,
+            ).mean()
+            + self.re_std_threshold
+            * continuous_output.rolling(
+                window=self.window_size,
+                min_periods=self.window_size - self.max_missing_days,
+            ).std()
+        )
+        return continuous_output.iloc[-1] > anomaly_threshold.iloc[-1]
 
     # Return if anomalous day labels
     def labelAnomaly(
@@ -131,9 +206,14 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
         max_missing_days: int = 2,
         n_components: int = 3,
         re_std_threshold: float = 2,
+        remove_past_anomalies: bool = False,
     ):
         super().__init__(
-            features, window_size, max_missing_days, re_std_threshold
+            features,
+            window_size,
+            max_missing_days,
+            re_std_threshold,
+            remove_past_anomalies,
         )
         self.n_components = n_components
         self.model = Pipeline(
@@ -159,7 +239,7 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
         self.validateInputData(subject_data)
 
         # Sort values
-        subject_data = subject_data.sort_values(by="study_day")
+        subject_data = subject_data.sort_values(by="study_day").copy()
 
         # initialize columns names with features + _re
         df_cols = ["{}_re".format(feature) for feature in self.features]
@@ -175,13 +255,17 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
         )
 
         # Calculate reconstruction error for each day
+        subject_data["anomaly_label"] = np.zeros(subject_data.shape[0]).astype(
+            bool
+        )
         for i in range(subject_data.shape[0]):
             # RE only calculated with sufficient historical data
             if i > (self.window_size):
                 # Train on window_size days
-                train = subject_data.iloc[i - self.window_size: i].dropna(
+                train = subject_data.iloc[i - self.window_size : i].dropna(
                     subset=self.features
                 )
+                train = train[train["anomaly_label"] == False]
                 if train.shape[0] < (self.window_size - self.max_missing_days):
                     continue
 
@@ -191,7 +275,7 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                 ].components_
 
                 # Training set + next day
-                X = subject_data.iloc[i - self.window_size: i + 1][
+                X = subject_data.iloc[i - self.window_size : i + 1][
                     self.features
                 ]
 
@@ -215,8 +299,18 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                     )
                 )[-1]
 
-        # Clip reconstruction error to 10
-        re_df[re_df > 10] = 10
+                # Clip reconstruction error to 10
+                re_df[re_df > 10] = 10
+                if self.remove_past_anomalies:
+                    total_re = re_df[df_cols].sum(axis=1, min_count=1)
+                    use_re = total_re[
+                        (total_re.index >= (i - self.window_size))
+                        & (total_re.index <= i)
+                        & (~subject_data["anomaly_label"])
+                    ]
+                    subject_data["anomaly_label"].iloc[
+                        i
+                    ] = self.anomalyDecision(use_re)
 
         re_df["total_re"] = (re_df).sum(axis=1, min_count=1)
         re_df["study_day"] = subject_data["study_day"]
@@ -236,6 +330,7 @@ class NMFRollingAnomalyDetector(PCARollingAnomalyDetector):
         max_missing_days: int = 2,
         n_components: int = 3,
         re_std_threshold: float = 2.0,
+        remove_past_anomalies: bool = False,
     ):
         super().__init__(
             features,
@@ -243,10 +338,11 @@ class NMFRollingAnomalyDetector(PCARollingAnomalyDetector):
             max_missing_days,
             n_components,
             re_std_threshold,
+            remove_past_anomalies,
         )
         self.model = Pipeline(
             [
-                ("scaler", MinMaxScaler()),
+                ("scaler", MinMaxScaler(clip=True)),
                 ("nmf", NMF(n_components=n_components)),
             ]
         )
@@ -268,12 +364,16 @@ class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
         window_size: int = 7,
         max_missing_days: int = 2,
         n_components: int = 3,
-        kernel: str = "rbf",
+        kernel: Literal[
+            "linear", "poly", "rbf", "sigmoid", "precomputed"
+        ] = "rbf",
+        remove_past_anomalies: bool = False,
     ):
         super().__init__(
             features,
             window_size,
             max_missing_days,
+            remove_past_anomalies=remove_past_anomalies,
         )
         self.n_components = n_components
         self.model = Pipeline(
@@ -287,23 +387,29 @@ class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
     def labelAnomaly(
         self, subject_data: pd.DataFrame, continuous: bool = False, **kwargs
     ) -> NDArray:
+        anomaly_continuous = np.full(subject_data.shape[0], 0)
         anomaly_labels = np.full(subject_data.shape[0], 0)
-
         # Predict if last day of window anomalous
         for i in range(subject_data.shape[0]):
             # RE only calculated with sufficient historical data
             if i > (self.window_size):
                 # Train on window_size days
-                train = subject_data.iloc[i - self.window_size: i].dropna(
-                    subset=self.features
-                )
+                if self.remove_past_anomalies:
+                    train = subject_data.iloc[i - self.window_size : i].dropna(
+                        subset=self.features
+                    )
+                    train = train[~anomaly_labels]
+                else:
+                    train = subject_data.iloc[i - self.window_size : i].dropna(
+                        subset=self.features
+                    )
                 if train.shape[0] < (self.window_size - self.max_missing_days):
                     continue
 
                 self.model.fit(train[self.features])
 
                 # Training set + next day
-                X = subject_data.iloc[i - self.window_size: i + 1][
+                X = subject_data.iloc[i - self.window_size : i + 1][
                     self.features
                 ]
 
@@ -311,16 +417,14 @@ class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
                 if np.any(X.iloc[-1].isnull()):
                     continue
 
-                if continuous:
-                    anomaly_labels[i] = self.model.score_samples(X.dropna())[
-                        -1
-                    ]
-                else:
-                    anomaly_labels[i] = self.model.predict(X.dropna())[-1]
+                anomaly_continuous[i] = self.model.score_samples(X.dropna())[
+                    -1
+                ]
+                anomaly_labels[i] = self.model.predict(X.dropna())[-1]
         if not continuous:
             anomaly_labels[anomaly_labels == -1.0] = 0
             return anomaly_labels == 1
-        return anomaly_labels
+        return anomaly_continuous
 
     def getContinuous(self, subject_data, **kwargs) -> NDArray:
         return self.labelAnomaly(subject_data, continuous=True)

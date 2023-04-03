@@ -1,4 +1,4 @@
-"""_summary_ Experiment 08: How does the threshold for anomalies influence results?
+"""_summary_ Experiment 05: Are curated featuers better for AD?
 _author_ Samir Akre <sakre@g.ucla.edu>
 
 This work looks at the correlation between detected anomalies and change in 
@@ -11,7 +11,6 @@ anomalies.
 import time
 import pandas as pd
 import numpy as np
-import scipy.stats as stats
 from p_tqdm import p_map
 from pathlib import Path
 from itertools import product
@@ -33,16 +32,16 @@ from mhealth_anomaly_detection import format_axis as fa
 DEBUG = False
 
 PARALLEL = True
-USE_CACHE = True
+USE_CACHE = False
 USE_CACHE_INTERMEDIATE = False
 
 # Ignore divide by 0 error -> expected and happens in PCA
 np.seterr(divide="ignore", invalid="ignore")
 
 # Meta params
-NUM_CPUS = 6
+NUM_CPUS = 10
 MAX_MISSING_DAYS = 2
-EXPERIMENT = "exp08"
+EXPERIMENT = "exp03"
 
 # Dataset Parameters
 YEAR = 2
@@ -71,18 +70,18 @@ MIN_DAYS = 7
 WINDOW_SIZES = [7, 14, 28]
 ANOMALY_PERIODS = [1, 2, 3]
 N_COMPONENTS = [3, 5, 10]
-THRESHOLDS = [0.5, 1, 1.5, 2]
+KERNELS = ["poly", "rbf", "sigmoid"]
 
 # Debugging
 if DEBUG:
-    WINDOW_SIZES = [14]
+    WINDOW_SIZES = [7, 14]
     ANOMALY_PERIODS = [2]
     N_COMPONENTS = [3]
-    THRESHOLDS = [0.5]
-    PARALLEL = False
+    KERNELS = ["poly"]
     USE_CACHE = False
     USE_CACHE_INTERMEDIATE = False
 
+N_PARAMS = max([len(N_COMPONENTS), len(KERNELS)])
 
 if __name__ == "__main__":
     start = time.perf_counter()
@@ -106,7 +105,7 @@ if __name__ == "__main__":
         phq_anomalies = pd.read_csv(fpath)
 
     else:
-        print("\nLoading GLOBEM year 2 dataset...")
+        print(f"\nLoading GLOBEM year {YEAR} dataset...")
         dataset = datasets.GLOBEM(
             data_path="~/Data/mHealth_external_datasets/GLOBEM",
             year=YEAR,
@@ -132,8 +131,8 @@ if __name__ == "__main__":
             )
             anomalies_detected_list = []
             print("\nRunning anomaly detection in different conditions...")
-            conditions = list(product(WINDOW_SIZES, N_COMPONENTS))
-            for i, (window_size, n_components) in enumerate(conditions):
+            conditions = list(product(WINDOW_SIZES, range(N_PARAMS)))
+            for i, (window_size, i_param) in enumerate(conditions):
                 # Initiate Anomaly Detectors
                 detectors = []
                 base_detector = anomaly_detection.BaseRollingAnomalyDetector(
@@ -141,15 +140,18 @@ if __name__ == "__main__":
                     window_size=window_size,
                     max_missing_days=MAX_MISSING_DAYS,
                 )
-                if n_components == N_COMPONENTS[0]:
+                if i_param == 0:
                     detectors.append(base_detector)
-                if n_components < window_size:
+
+                if i_param < len(N_COMPONENTS) and (
+                    N_COMPONENTS[i_param] < window_size
+                ):
                     detectors.append(
                         anomaly_detection.PCARollingAnomalyDetector(
                             features=features,
                             window_size=window_size,
                             max_missing_days=MAX_MISSING_DAYS,
-                            n_components=n_components,
+                            n_components=N_COMPONENTS[i_param],
                         )
                     )
                     detectors.append(
@@ -157,7 +159,17 @@ if __name__ == "__main__":
                             features=features,
                             window_size=window_size,
                             max_missing_days=MAX_MISSING_DAYS,
-                            n_components=n_components,
+                            n_components=N_COMPONENTS[i_param],
+                        )
+                    )
+                if i_param < len(KERNELS):
+                    detectors.append(
+                        anomaly_detection.SVMRollingAnomalyDetector(
+                            features=features,
+                            window_size=window_size,
+                            max_missing_days=MAX_MISSING_DAYS,
+                            kernel=KERNELS[i_param],
+                            n_components=5,
                         )
                     )
                 if len(detectors) == 0:
@@ -169,29 +181,19 @@ if __name__ == "__main__":
 
                 # Detect anomalies
                 def detectAnomalies(grouped) -> pd.DataFrame:
-                    index_cols = [
-                        "subject_id",
-                        "study_day",
-                        "window_size",
-                        "re_threshold",
-                    ]
+                    index_cols = ["subject_id", "study_day", "window_size"]
                     _, subject_data = grouped
-                    sd_list = []
                     for detector in detectors:
                         dname = detector.name
+                        if i_param > 0:
+                            if dname in ["RollingMean"]:
+                                continue
                         subject_data[f"{dname}_anomaly"] = np.nan
-                        detector.getReconstructionError(subject_data)
-                        for threshold in THRESHOLDS:
-                            detector.re_std_threshold = threshold
-                            s_df = subject_data.copy()
-                            s_df[f"{dname}_anomaly"] = detector.labelAnomaly(
-                                subject_data, recalc_re=False
-                            ).astype("Int64")
-                            s_df["window_size"] = window_size
-                            s_df["re_threshold"] = threshold
-                            sd_list.append(s_df.set_index(index_cols))
-                    sd = pd.concat(sd_list)
-                    return sd
+                        subject_data[
+                            f"{dname}_anomaly"
+                        ] = detector.labelAnomaly(subject_data)
+                    subject_data["window_size"] = window_size
+                    return subject_data.set_index(index_cols)
 
                 if PARALLEL:
                     ad = pd.concat(
@@ -204,6 +206,7 @@ if __name__ == "__main__":
                 else:
                     ad = []
                     for s in imputed.groupby("subject_id"):
+                        print(s[0])
                         ad.append(detectAnomalies(s))
                     ad = pd.concat(ad)
                 anomalies_detected_list.append(ad)
@@ -217,11 +220,8 @@ if __name__ == "__main__":
         phq_anomalies_list = []
         print("\n\tCounting anomalies between phq periods")
         for period in ANOMALY_PERIODS:
-            for (
-                window_size,
-                re_threshold,
-            ), ad_df in anomalies_detected.groupby(
-                ["window_size", "re_threshold"]
+            for (window_size), ad_df in anomalies_detected.groupby(
+                ["window_size"]
             ):
                 phq_anomalies = dataset.get_phq_periods(
                     ad_df,
@@ -229,7 +229,6 @@ if __name__ == "__main__":
                     period,
                 )
                 phq_anomalies["window_size"] = window_size
-                phq_anomalies["re_threshold"] = re_threshold
                 phq_anomalies_list.append(phq_anomalies)
 
         print("\n\tSaving results to", fpath)
@@ -242,7 +241,7 @@ if __name__ == "__main__":
     ]
     print("\tOnly keeping periods that have at least 6 days per week")
     print(f"\t\t from {phq_anomalies.shape[0]} to {phq_anomalies_qc.shape[0]}")
-    parameter_cols = ["window_size", "period", "re_threshold"]
+    parameter_cols = ["window_size", "period"]
     anomaly_detector_cols = [
         d for d in phq_anomalies.columns if d.endswith("_anomaly")
     ]
@@ -254,7 +253,7 @@ if __name__ == "__main__":
         var_name="detector",
     )
 
-    out_dir = Path("output", EXPERIMENT)
+    out_dir = Path("output", f"GLOBEM_year-{YEAR}", EXPERIMENT)
     if DEBUG:
         out_dir = Path("output", "debug", EXPERIMENT)
     print(f"\nPlotting to {out_dir}...")
@@ -262,10 +261,13 @@ if __name__ == "__main__":
         out_dir.mkdir(parents=True)
 
     # Plot influence of window size on anomalies changed
-    info_cols = ["period", "window_size", "re_threshold"]
+    info_cols = [
+        "period",
+        "window_size",
+    ]
     for target in ["phq_change", "phq_stop", "phq_start"]:
         corr = anomaly_detection.correlateDetectedToOutcome(
-            phq_anomalies_qc[phq_anomalies.period == 1],
+            phq_anomalies_qc,
             anomaly_detector_cols,
             outcome_col=target,
             groupby_cols=info_cols,
@@ -274,7 +276,7 @@ if __name__ == "__main__":
         for metric in ["rho", "r2"]:
             corr_table = corr.pivot_table(
                 index=["detector"],
-                columns=["window_size", "re_threshold"],
+                columns=["window_size", "period"],
                 values="rho",
                 aggfunc="median",
             )
@@ -299,4 +301,4 @@ if __name__ == "__main__":
             plt.close()
 
     stop = time.perf_counter()
-    print(f"\nCompleted in {stop - start:0.2f} seconds")
+    print(f"\nCompleted in {(stop - start)/60:0.2f} minutes")
