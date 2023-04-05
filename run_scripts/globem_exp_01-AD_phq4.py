@@ -42,7 +42,7 @@ np.seterr(divide="ignore", invalid="ignore")
 # Meta params
 NUM_CPUS = 10
 MAX_MISSING_DAYS = 2
-EXPERIMENT = "exp01"
+EXPERIMENT = "GLOBEM_exp01"
 
 # Dataset Parameters
 YEAR = 3

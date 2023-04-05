@@ -121,8 +121,8 @@ class BaseRollingAnomalyDetector:
                         & (total_re.index <= i)
                         & (~subject_data["anomaly_label"])
                     ]
-                    subject_data["anomaly_label"].iloc[
-                        i
+                    subject_data.loc[
+                        i, "anomaly_label"
                     ] = self.anomalyDecision(use_re)
 
         else:
@@ -308,8 +308,9 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                         & (total_re.index <= i)
                         & (~subject_data["anomaly_label"])
                     ]
-                    subject_data["anomaly_label"].iloc[
-                        i
+                    subject_data.loc[
+                        i,
+                        'anomaly_label'
                     ] = self.anomalyDecision(use_re)
 
         re_df["total_re"] = (re_df).sum(axis=1, min_count=1)
@@ -343,7 +344,7 @@ class NMFRollingAnomalyDetector(PCARollingAnomalyDetector):
         self.model = Pipeline(
             [
                 ("scaler", MinMaxScaler(clip=True)),
-                ("nmf", NMF(n_components=n_components)),
+                ("nmf", NMF(n_components=n_components, max_iter=1000)),
             ]
         )
         str_nc = str(n_components)
@@ -398,7 +399,7 @@ class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
                     train = subject_data.iloc[i - self.window_size : i].dropna(
                         subset=self.features
                     )
-                    train = train[~anomaly_labels]
+                    train = train[~anomaly_labels[i - self.window_size : i].astype(bool)]
                 else:
                     train = subject_data.iloc[i - self.window_size : i].dropna(
                         subset=self.features
@@ -420,7 +421,7 @@ class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
                 anomaly_continuous[i] = self.model.score_samples(X.dropna())[
                     -1
                 ]
-                anomaly_labels[i] = self.model.predict(X.dropna())[-1]
+                anomaly_labels[i] = self.model.predict(X.dropna())[-1] == 1
         if not continuous:
             anomaly_labels[anomaly_labels == -1.0] = 0
             return anomaly_labels == 1
@@ -436,8 +437,9 @@ class IFRollingAnomalyDetector(SVMRollingAnomalyDetector):
         features: list,
         window_size: int = 7,
         max_missing_days: int = 2,
+        remove_past_anomalies: bool = False,
     ):
-        super().__init__(features, window_size, max_missing_days)
+        super().__init__(features, window_size, max_missing_days, remove_past_anomalies=remove_past_anomalies)
         self.model = IsolationForest()
         self.name = "IsolationForest"
         self.window_size = window_size

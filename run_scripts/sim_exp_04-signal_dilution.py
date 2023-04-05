@@ -8,11 +8,6 @@ anomalies. heatmap of average (mean/median) distance from true anomalies to
 detected anomalies. Heatmap of sensitivity/specificity/accuracy of models at
 predicting anomalous days
 """
-import sys
-
-# Make imports work
-# TODO: Remove this dependency -- worked fine when using poetry, but not just python3
-sys.path.insert(0, "/Users/sakre/Code/dgc/mhealth_anomaly_detection")
 import time
 import pandas as pd
 from tqdm.auto import tqdm
