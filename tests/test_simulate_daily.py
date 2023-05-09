@@ -2,6 +2,18 @@
 # TODO: test that simulation using base class and anomaly class with different parameters gives different results
 # TODO: test anomalies input at desired frequency
 from mhealth_anomaly_detection import simulate_daily as sd
+from pandas.testing import assert_frame_equal
+
+
+def assert_frame_not_equal(*args, **kwargs):
+    try:
+        assert_frame_equal(*args, **kwargs)
+    except AssertionError:
+        # frames are not equal
+        pass
+    else:
+        # frames are equal
+        raise AssertionError
 
 
 def test_base_case_single():
@@ -26,6 +38,30 @@ def test_base_case_single():
     assert data.study_day.nunique() == 1
     assert "example_feature" in data.columns
     assert data.shape == (1, 4)
+
+
+def test_point_anomaly():
+    simulator = sd.BaseDailyDataSimulator(
+        feature_params={
+            "example_feature": {
+                "min": 0,
+                "max": 1,
+                "mean": 0.5,
+                "std": 1,
+                "history_len": 1,
+            }
+        },
+        n_days=2,
+        n_subjects=1,
+        sim_type="base",
+        cache_simulation=False,
+    )
+    data = simulator.simulateData()
+    anom = simulator.addPointAnomalies(data, 1, 2)
+    print(data)
+    print(anom)
+    assert data.shape == anom.shape
+    assert_frame_not_equal(data, anom)
 
 
 def test_base_case_several():

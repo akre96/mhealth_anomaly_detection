@@ -131,13 +131,13 @@ if __name__ == "__main__":
     for f in files:
         # Get simulation parameters saved in file name
         file_params_str = f.name.split(".")[0].split("_")
-        if f.name.startswith("exp"):
+        if "exp" in f.name:
             continue
         file_params = {
             val.split("-")[0]: val.split("-")[1] for val in file_params_str[1:]
         }
         file_params["sim_type"] = f.name.split("_")[0]
-
+        all_feature_params['basePointAnomaly'] = all_feature_params['base']
         if file_params["sim_type"] not in all_feature_params.keys():
             print("Skipping", f)
             continue

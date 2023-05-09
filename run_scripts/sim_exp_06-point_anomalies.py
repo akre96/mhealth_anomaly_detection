@@ -1,5 +1,4 @@
-"""_summary_ Experiment 05: Extend exp 01 looking at removing anomalies
-already detected
+"""_summary_ Sim Experiment 06: How do anomaly detectors perform on point anomalies vs those incorporated into future data?
 _author_ Samir Akre <sakre@g.ucla.edu>
 
 
@@ -24,20 +23,19 @@ from mhealth_anomaly_detection.wrapper_functions import calcSimMetrics
 
 DEBUG = False
 
-EXPERIMENT = "sim_exp05"
+EXPERIMENT = "sim_exp06"
 USE_CACHE = True
-PARALLEL = True
+PARALLEL = 8
 NUM_CPUS = 10
 
 # Dataset parameters
 N_SUBJECTS = 100
 DAYS_OF_DATA = 120
-FREQUENCIES = [14]
-WINDOW_SIZES = [7, 14, 28]
+FREQUENCIES = [7, 14, 28]
+WINDOW_SIZES = [14]
 N_FEATURES = 5
-REMOVE_ANOMALIES = [True, False]
 ANOMALY_TYPES = ["point", "rolling"]
-KEY_DIFFERENCE = "remove_anomalies"
+KEY_DIFFERENCE = "anomaly_type"
 
 if DEBUG:
     N_SUBJECTS = 2
@@ -54,7 +52,6 @@ def run_ad_on_simulated(
     feature_params: Dict,
     param_name: str,
     anomaly_frequency: int,
-    remove_anomalies: bool,
     window_size: int,
     anomaly_type: str,
 ) -> pd.DataFrame:
@@ -84,6 +81,7 @@ def run_ad_on_simulated(
 
     n_features = N_FEATURES
     # Simulate Data
+    data = simulator.simulateData(use_cache=False)
     data["anomaly_freq"] = anomaly_frequency
     data["anomaly_type"] = anomaly_type
     data["history_type"] = param_name
@@ -91,7 +89,6 @@ def run_ad_on_simulated(
     data["anomaly"] = ((data["study_day"] % anomaly_frequency) == 0) & (
         data["study_day"] > 0
     )
-    data["remove_anomalies"] = remove_anomalies
     data["n_features"] = n_features
 
     # Run Anomaly Detection
@@ -106,21 +103,18 @@ def run_ad_on_simulated(
             features=features,
             window_size=window_size,
             max_missing_days=0,
-            remove_past_anomalies=remove_anomalies,
         ),
         anomaly_detection.PCARollingAnomalyDetector(
             features=features,
             window_size=window_size,
             max_missing_days=0,
             n_components=n_components,
-            remove_past_anomalies=remove_anomalies,
         ),
         anomaly_detection.NMFRollingAnomalyDetector(
             features=features,
             window_size=window_size,
             max_missing_days=0,
             n_components=n_components,
-            remove_past_anomalies=remove_anomalies,
         ),
         anomaly_detection.SVMRollingAnomalyDetector(
             features=features,
@@ -128,7 +122,6 @@ def run_ad_on_simulated(
             max_missing_days=0,
             n_components=n_components,
             kernel="poly",
-            remove_past_anomalies=remove_anomalies,
         ),
         anomaly_detection.SVMRollingAnomalyDetector(
             features=features,
@@ -136,7 +129,6 @@ def run_ad_on_simulated(
             max_missing_days=0,
             n_components=n_components,
             kernel="sigmoid",
-            remove_past_anomalies=remove_anomalies,
         ),
         anomaly_detection.SVMRollingAnomalyDetector(
             features=features,
@@ -144,13 +136,11 @@ def run_ad_on_simulated(
             max_missing_days=0,
             n_components=n_components,
             kernel="rbf",
-            remove_past_anomalies=remove_anomalies,
         ),
         anomaly_detection.IFRollingAnomalyDetector(
             features=features,
             window_size=window_size,
             max_missing_days=0,
-            remove_past_anomalies=remove_anomalies,
         ),
     ]
     if DEBUG:
@@ -182,6 +172,7 @@ def run_ad_on_simulated(
     else:
         ad = []
         for s in data.groupby("subject_id"):
+            print(s[0])
             ad.append(detectAnomalies(s))
         ad = pd.concat(ad)
     anomalies_detected_list.append(ad)
@@ -210,33 +201,28 @@ if __name__ == "__main__":
         # Consolidate list of all permutations of simulated data parameters
         for anomaly_frequency in FREQUENCIES:
             for window_size in WINDOW_SIZES:
-                for remove_anomalies in REMOVE_ANOMALIES:
-                    for anomaly_type in ANOMALY_TYPES:
-                        feature_param_dict = {
-                            "history_all_28": {
-                                f"history-{28}_anomalyFrequency-{anomaly_frequency}_{i}": {
-                                    "min": 0,
-                                    "max": 10,
-                                    "mean": 5,
-                                    "std": 2,
-                                    "history_len": 28,
-                                    "anomaly_frequency": anomaly_frequency,
-                                    "anomaly_std_scale": 3,
-                                }
-                                for i in range(N_FEATURES)
-                            },
-                        }
-                        for param_i, (param_name, feature_params) in enumerate(
-                            feature_param_dict.items()
-                        ):
-                            run_parameters = {}
-                            run_parameters["anomaly_frequency"] = anomaly_frequency
-                            run_parameters["feature_params"] = feature_params
-                            run_parameters["param_name"] = param_name
-                            run_parameters["window_size"] = window_size
-                            run_parameters["remove_anomalies"] = remove_anomalies
-                            run_parameters["anomaly_type"] = anomaly_type
-                            run_list.append(run_parameters)
+                feature_param_dict = {}
+                param_name = "history_all_28" 
+                feature_params = {
+                    f"history-{28}_anomalyFrequency-{anomaly_frequency}_{i}": {
+                        "min": 0,
+                        "max": 10,
+                        "mean": 5,
+                        "std": 2,
+                        "history_len": 28,
+                        "anomaly_frequency": anomaly_frequency,
+                        "anomaly_std_scale": 3,
+                    }
+                    for i in range(N_FEATURES)
+                }
+                for anomaly_type in ANOMALY_TYPES:
+                    run_parameters = {}
+                    run_parameters["anomaly_frequency"] = anomaly_frequency
+                    run_parameters["feature_params"] = feature_params
+                    run_parameters["param_name"] = param_name
+                    run_parameters["window_size"] = window_size
+                    run_parameters["anomaly_type"] = anomaly_type
+                    run_list.append(run_parameters)
 
         def expand_args_run(kwargs):
             return run_ad_on_simulated(**kwargs)
@@ -256,7 +242,6 @@ if __name__ == "__main__":
         "window_size",
         "n_features",
         "anomaly_freq",
-        "anomaly_type",
     ]
 
     corr, corr_table, performance_cont_df, performance_df = calcSimMetrics(
@@ -304,7 +289,7 @@ if __name__ == "__main__":
         sns.heatmap(
             use_df.pivot_table(
                 values=metric,
-                columns=["anomaly_type", "window_size"],
+                columns=["anomaly_freq", "window_size"],
                 index=["model", KEY_DIFFERENCE],
             ).round(2),
             annot=True,

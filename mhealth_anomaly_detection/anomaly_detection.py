@@ -10,6 +10,9 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import average_precision_score
 import scipy.stats as stats
+from sklearn.utils._testing import ignore_warnings
+from sklearn.exceptions import ConvergenceWarning
+
 
 
 # Base detector takes rolling mean of window size per feature
@@ -231,6 +234,7 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
 
         self.name = "PCA" + "_" + str_nc
 
+    @ignore_warnings(category=ConvergenceWarning)
     def getReconstructionError(
         self,
         subject_data: pd.DataFrame,
@@ -309,8 +313,7 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                         & (~subject_data["anomaly_label"])
                     ]
                     subject_data.loc[
-                        i,
-                        'anomaly_label'
+                        i, "anomaly_label"
                     ] = self.anomalyDecision(use_re)
 
         re_df["total_re"] = (re_df).sum(axis=1, min_count=1)
@@ -399,7 +402,9 @@ class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
                     train = subject_data.iloc[i - self.window_size : i].dropna(
                         subset=self.features
                     )
-                    train = train[~anomaly_labels[i - self.window_size : i].astype(bool)]
+                    train = train[
+                        ~anomaly_labels[i - self.window_size : i].astype(bool)
+                    ]
                 else:
                     train = subject_data.iloc[i - self.window_size : i].dropna(
                         subset=self.features
@@ -439,7 +444,12 @@ class IFRollingAnomalyDetector(SVMRollingAnomalyDetector):
         max_missing_days: int = 2,
         remove_past_anomalies: bool = False,
     ):
-        super().__init__(features, window_size, max_missing_days, remove_past_anomalies=remove_past_anomalies)
+        super().__init__(
+            features,
+            window_size,
+            max_missing_days,
+            remove_past_anomalies=remove_past_anomalies,
+        )
         self.model = IsolationForest()
         self.name = "IsolationForest"
         self.window_size = window_size

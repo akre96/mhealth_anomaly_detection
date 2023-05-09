@@ -220,6 +220,38 @@ class BaseDailyDataSimulator:
                 print("\tSaved data to:", out_path)
             return sim_data
 
+    def addPointAnomalies(
+        self,
+        data: pd.DataFrame,
+        anomaly_period: int = 7,
+        anomaly_std_scale: float = 2.0,
+    ) -> pd.DataFrame:
+        """Add point anomalies to simulated data
+
+        Args:
+            data (pd.DataFrame): Simulated data
+            anomaly_period (int, optional): Number of days between anomalies. Defaults to 7.
+
+        Returns:
+            pd.DataFrame: Simulated data with anomalies
+        """
+        data = data.copy()
+        for feature, params in self.feature_params.items():
+            for i in range(0, self.n_days, anomaly_period):
+                if i == 0:
+                    continue
+                data.loc[
+                    (data["study_day"] == i),
+                    feature,
+                ] += np.random.normal(
+                    loc=0, scale=params["std"] * anomaly_std_scale
+                )
+        out_path = Path("cache", self.genDatasetFilename())
+        if self.cache_simulation:
+            data.to_csv(out_path, index=False)
+            print("\tSaved data to:", out_path)
+        return data
+
 
 # TODO: Create tests showing that this works
 class RandomAnomalySimulator(BaseDailyDataSimulator):
@@ -320,7 +352,14 @@ if __name__ == "__main__":
                 n_subjects=n_subjects,
                 sim_type=sim_type,
             )
-            data = simulator.simulateData()
+            print("Simulating base with point anomaly")
+            simulator = BaseDailyDataSimulator(
+                feature_params=all_feature_params[sim_type],
+                n_days=n_days,
+                n_subjects=n_subjects,
+                sim_type=sim_type+'PointAnomaly',
+            )
+            data = simulator.addPointAnomalies(simulator.simulateData())
             print("\nPreview of data: ")
             print(data.head(n=10))
 
