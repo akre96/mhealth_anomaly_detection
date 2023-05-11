@@ -84,7 +84,7 @@ class GLOBEM(DatasetBase):
         data = self.filter_redundant_cols(data)
         data["date"] = pd.to_datetime(data["date"], format="%Y-%m-%d")
         data = self.add_study_day(data)
-        data = fill_empty_days(data)
+        data = fillEmptyDays(data)
         data = self.filter_high_missing_participants(data)
         data = self.add_missingness_indicator(data)
 
@@ -437,7 +437,7 @@ class CrossCheck(DatasetBase):
         self.behavior_cols = [f for f in self.feature_cols if "ema" not in f]
 
         # Preprocess data
-        self.data = fill_empty_days(self.preprocess()).fillna(np.nan)
+        self.data = fillEmptyDays(self.preprocess()).fillna(np.nan)
 
     def preprocess(
         self,
@@ -481,7 +481,7 @@ class CrossCheck(DatasetBase):
         return reform_data
 
 
-def fill_empty_days(data: pd.DataFrame) -> pd.DataFrame:
+def fillEmptyDays(data: pd.DataFrame) -> pd.DataFrame:
     expected_rows = []
     for (sid), s_df in data.groupby("subject_id"):
         min_d = s_df.study_day.min()
