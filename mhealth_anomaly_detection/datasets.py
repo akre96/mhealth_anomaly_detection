@@ -6,7 +6,7 @@ from tqdm.auto import tqdm
 
 
 class DatasetBase:
-    def __init(
+    def __init__(
         self,
         data_path: str,
     ):
@@ -15,7 +15,41 @@ class DatasetBase:
         else:
             raise FileNotFoundError(f"{data_path} does not exist")
 
-        self.data = pd.DataFrame()
+        self.data = self.preprocess(self.data_raw)
+
+    def preprocess(self, data_raw) -> pd.DataFrame:
+        return data_raw
+
+
+class OPTIMA(DatasetBase):
+    def __init__(self, data_path: str) -> None:
+        super().__init__(data_path)
+
+    def addDay1Date(self, data: pd.DataFrame) -> pd.DataFrame:
+        day1 = (
+            data.groupby("subject_id")
+            .date.min()
+            .reset_index()
+            .rename(columns={"date": "day1"})
+        )
+        data_fmt = data.merge(day1, how="left")
+        data_fmt["study_day"] = (data_fmt.date - data_fmt.day1).dt.days
+        return data_fmt
+
+    def preprocess(self, data_raw) -> pd.DataFrame:
+        data_raw = data_raw.rename(columns={"user_id": "subject_id"})
+        data_raw['date'] = pd.to_datetime(data_raw['date'])
+        self.sensor_cols = [
+            c
+            for c in data_raw.columns
+            if c not in ["subject_id", "date", "study_day"]
+        ]
+        hk_data_fmt = self.addDay1Date(data_raw)
+        hk_data_fmt = hk_data_fmt[
+            ["subject_id", "study_day", "date", *self.sensor_cols]
+        ]
+        hk_data_fmt = fillEmptyDays(hk_data_fmt)
+        return hk_data_fmt
 
 
 class GLOBEM(DatasetBase):

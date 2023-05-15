@@ -62,7 +62,7 @@ def run_ad_on_simulated(
             n_days=DAYS_OF_DATA,
             cache_simulation=False,
             n_subjects=N_SUBJECTS,
-            sim_type='base'
+            sim_type="base",
         )
         data = simulator.addPointAnomalies(
             simulator.simulateData(use_cache=False),
@@ -202,7 +202,7 @@ if __name__ == "__main__":
         for anomaly_frequency in FREQUENCIES:
             for window_size in WINDOW_SIZES:
                 feature_param_dict = {}
-                param_name = "history_all_28" 
+                param_name = "history_all_28"
                 feature_params = {
                     f"history-{28}_anomalyFrequency-{anomaly_frequency}_{i}": {
                         "min": 0,

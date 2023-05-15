@@ -137,7 +137,7 @@ if __name__ == "__main__":
             val.split("-")[0]: val.split("-")[1] for val in file_params_str[1:]
         }
         file_params["sim_type"] = f.name.split("_")[0]
-        all_feature_params['basePointAnomaly'] = all_feature_params['base']
+        all_feature_params["basePointAnomaly"] = all_feature_params["base"]
         if file_params["sim_type"] not in all_feature_params.keys():
             print("Skipping", f)
             continue

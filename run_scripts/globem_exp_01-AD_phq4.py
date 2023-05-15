@@ -1,4 +1,4 @@
-"""_summary_ Experiment 04: How do different anomaly detectors perform at detecting change 
+"""_summary_ GLOBEM experiment 01: How do different anomaly detectors perform at detecting change 
 in mental health scores (PHQ-4) from the GLOBEM year 2 dataset
 _author_ Samir Akre <sakre@g.ucla.edu>
 

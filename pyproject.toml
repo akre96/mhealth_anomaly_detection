@@ -16,6 +16,7 @@ seaborn = "^0.12.1"
 p-tqdm = "^1.4.0"
 colour = "^0.1.5"
 autopep8 = "^2.0.2"
+altair = "^5.0.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.2"

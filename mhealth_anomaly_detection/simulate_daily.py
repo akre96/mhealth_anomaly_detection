@@ -357,7 +357,7 @@ if __name__ == "__main__":
                 feature_params=all_feature_params[sim_type],
                 n_days=n_days,
                 n_subjects=n_subjects,
-                sim_type=sim_type+'PointAnomaly',
+                sim_type=sim_type + "PointAnomaly",
             )
             data = simulator.addPointAnomalies(simulator.simulateData())
             print("\nPreview of data: ")

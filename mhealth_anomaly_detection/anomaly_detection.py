@@ -14,7 +14,6 @@ from sklearn.utils._testing import ignore_warnings
 from sklearn.exceptions import ConvergenceWarning
 
 
-
 # Base detector takes rolling mean of window size per feature
 class BaseRollingAnomalyDetector:
     def __init__(
@@ -198,7 +197,8 @@ class BaseRollingAnomalyDetector:
             )
             .std()
         )
-        return re_df["total_re"] > anomaly_threshold
+        re_df['threshold'] = anomaly_threshold
+        return (re_df["total_re"] > re_df["threshold"]).reset_index(drop=True)
 
 
 class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
@@ -286,7 +286,10 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                 # If out of training day has null values skip
                 if np.any(X.iloc[-1].isnull()):
                     continue
-
+                # If 0 variation across any variables skip
+                if np.sum((X.dropna().diff().dropna().sum() > 0)) <= 1:
+                    continue
+                
                 reconstruction = pd.DataFrame(
                     self.model.inverse_transform(
                         self.model.transform(X.dropna())
