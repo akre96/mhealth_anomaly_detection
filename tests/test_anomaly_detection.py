@@ -1,6 +1,7 @@
 import mhealth_anomaly_detection.anomaly_detection as ad
 import pandas as pd
 import numpy as np
+import pytest
 
 N_DAYS = 10
 N_FEATURES = 3
@@ -13,47 +14,65 @@ TEST_DATA = pd.DataFrame(
 )
 
 
-# Test that base detector outputs expected type and shape
-def test_input_output_base():
-    test_data = TEST_DATA.copy()
-    detector = ad.BaseRollingAnomalyDetector(
+# All anomaly detectors
+@pytest.fixture(params=[
+    ad.BaseRollingAnomalyDetector,
+    ad.PCARollingAnomalyDetector,
+    ad.NMFRollingAnomalyDetector,
+    ad.PCAGridRollingAnomalyDetector,
+    ad.IFRollingAnomalyDetector,
+    ad.SVMRollingAnomalyDetector,
+])
+def anomaly_detector_all(request):
+    print(str(request.param))
+    yield request.param(
         features=list(FEATURES.keys()),
         window_size=3,
     )
+
+# Only anomaly detectors with reconstruction error
+@pytest.fixture(params=[
+    ad.BaseRollingAnomalyDetector,
+    ad.PCARollingAnomalyDetector,
+    ad.NMFRollingAnomalyDetector,
+    ad.PCAGridRollingAnomalyDetector,
+])
+def anomaly_detector_re(request):
+    print(str(request.param))
+    yield request.param(
+        features=list(FEATURES.keys()),
+        window_size=3,
+    )
+
+
+# Test that base detector outputs expected type and shape
+def test_input_output_base(anomaly_detector_all):
+    test_data = TEST_DATA.copy()
     print(test_data)
-    re_df = detector.getReconstructionError(test_data)
+    re_df = anomaly_detector_all.getReconstructionError(test_data)
 
     # in re_df expect 2 column + 1 column per feature
     assert re_df.shape == (N_DAYS, N_FEATURES + 2)
 
 
 # Input data cannot be missing full row for a day
-def test_input_output_base_missing_day():
+def test_input_output_base_missing_day(anomaly_detector_re):
     # drop a day of data
     test_data = TEST_DATA.copy().drop(2)
 
     error = False
     try:
-        detector = ad.BaseRollingAnomalyDetector(
-            features=list(FEATURES.keys()),
-            window_size=3,
-        )
-        detector.getReconstructionError(test_data)
+        anomaly_detector_re.getReconstructionError(test_data)
     except ValueError:
         error = True
 
     assert error
 
 
-def test_input_output_base_remove_anom():
+def test_input_output_base_remove_anom(anomaly_detector_re):
     test_data = TEST_DATA
-    detector = ad.BaseRollingAnomalyDetector(
-        features=list(FEATURES.keys()),
-        window_size=3,
-        remove_past_anomalies=True,
-    )
     print(test_data)
-    re_df = detector.getReconstructionError(test_data)
+    re_df = anomaly_detector_re.getReconstructionError(test_data)
 
     # in re_df expect 2 column + 1 column per feature
     assert re_df.shape == (N_DAYS, N_FEATURES + 2)

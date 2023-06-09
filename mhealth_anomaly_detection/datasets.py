@@ -16,15 +16,81 @@ class DatasetBase:
             raise FileNotFoundError(f"{data_path} does not exist")
 
         self.data = self.preprocess(self.data_raw)
+        self.id_cols = []
+
+    def addStudyDay(self, data) -> pd.DataFrame:
+        # Get first date of participant
+        first_days = (
+            pd.DataFrame(data.groupby("subject_id")["date"].min())
+            .reset_index()
+            .rename(columns={"date": "first_day"})
+        )
+
+        # Set study day as relative days in study
+        reform_data = data.merge(first_days, validate="m:1")
+        reform_data["study_day"] = (
+            reform_data["date"] - reform_data["first_day"]
+        ).dt.days
+        self.id_cols = self.id_cols + ["study_day"]
+        return reform_data
 
     def preprocess(self, data_raw) -> pd.DataFrame:
         return data_raw
 
 
-class OPTIMA(DatasetBase):
-    def __init__(self, data_path: str) -> None:
-        super().__init__(data_path)
+class BRIGHTEN_v2(DatasetBase):
+    # Data downloaded from https://www.synapse.org/#!Synapse:syn10848316
+    # tables saved as csv with no metadata
+    def __init__(
+        self,
+        data_path: str | Path,
+        feature_types: List = ["mobility", "phone_communication", "weather"],
+    ):
+        if not Path(data_path).expanduser().is_dir():
+            raise FileNotFoundError(
+                f"{data_path} must be a folder to BIRGHTEN data"
+            )
+        self.data_path = data_path
+        self.feature_types = feature_types
+        self.features = []
+        self.id_cols = ["subject_id", "date", "week"]
+        self.data_raw = self.getPassiveSensorData()
+        self.data = self.preprocess(self.data_raw)
 
+    def preprocess(self, data_raw) -> pd.DataFrame:
+        data = self.filterByStudyLength(data_raw, min_weeks=8)
+        data = self.addStudyDay(data)
+        data = fillEmptyDays(data)
+        return data
+
+    def getDemographics(self):
+        demo = pd.read_csv(Path(self.data_path, "demographics.csv"))
+        demo = demo.rename(columns={"participant_id": "subject_id"})
+        demo_v2 = demo[demo.study == "Brighten-v2"]
+        return demo_v2
+
+    def getPassiveSensorData(self):
+        id_cols = ["participant_id", "dt_passive", "week"]
+        features_df = pd.DataFrame(columns=id_cols)
+        for p in self.feature_types:
+            df = pd.read_csv(Path(self.data_path, p + "_v2.csv"))
+            features_df = features_df.merge(
+                df,
+                how="outer",
+            )
+        self.features = [c for c in features_df.columns if c not in id_cols]
+        features_df["dt_passive"] = pd.to_datetime(features_df["dt_passive"])
+        return features_df.rename(
+            columns={"participant_id": "subject_id", "dt_passive": "date"}
+        )
+
+    def filterByStudyLength(self, data: pd.DataFrame, min_weeks: int = 8):
+        weeks = data.groupby("subject_id").week.max()
+        keep_ids = weeks[weeks >= min_weeks].index
+        return data[data.subject_id.isin(keep_ids)]
+
+
+class OPTIMA(DatasetBase):
     def addDay1Date(self, data: pd.DataFrame) -> pd.DataFrame:
         day1 = (
             data.groupby("subject_id")
@@ -38,7 +104,7 @@ class OPTIMA(DatasetBase):
 
     def preprocess(self, data_raw) -> pd.DataFrame:
         data_raw = data_raw.rename(columns={"user_id": "subject_id"})
-        data_raw['date'] = pd.to_datetime(data_raw['date'])
+        data_raw["date"] = pd.to_datetime(data_raw["date"])
         self.sensor_cols = [
             c
             for c in data_raw.columns
@@ -117,28 +183,12 @@ class GLOBEM(DatasetBase):
         self.id_cols = ["subject_id", "platform", "date"]
         data = self.filter_redundant_cols(data)
         data["date"] = pd.to_datetime(data["date"], format="%Y-%m-%d")
-        data = self.add_study_day(data)
+        data = self.addStudyDay(data)
         data = fillEmptyDays(data)
         data = self.filter_high_missing_participants(data)
         data = self.add_missingness_indicator(data)
 
         return data[self.id_cols + self.feature_cols]
-
-    def add_study_day(self, data) -> pd.DataFrame:
-        # Get first date of participant
-        first_days = (
-            pd.DataFrame(data.groupby("subject_id")["date"].min())
-            .reset_index()
-            .rename(columns={"date": "first_day"})
-        )
-
-        # Set study day as relative days in study
-        reform_data = data.merge(first_days, validate="m:1")
-        reform_data["study_day"] = (
-            reform_data["date"] - reform_data["first_day"]
-        ).dt.days
-        self.id_cols = self.id_cols + ["study_day"]
-        return reform_data
 
     def combine_data(self) -> pd.DataFrame:
         surveys = self.get_weekly_phq4()
@@ -334,7 +384,7 @@ class GLOBEM(DatasetBase):
             ]
         else:
             print(
-                "Warning: Filtering participants not established for year 1,3,4"
+                "Warning: Filtering participants not established for years 1 and 4"
             )
 
         print(

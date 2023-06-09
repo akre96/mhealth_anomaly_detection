@@ -28,7 +28,6 @@ MAX_MISSING_DAYS = 2
 EXPERIMENT = "OPTIMA_exp01"
 
 # Anomaly detector Parameters
-WINDOW_SIZES = [7, 14, 28]
 WINDOW_SIZES = [28]
 N_COMPONENTS = [5, 10, 20]
 MIN_DAYS = 7
@@ -69,33 +68,37 @@ if __name__ == "__main__":
     print("\nRunning anomaly detection in different conditions...")
     conditions = list(product(WINDOW_SIZES, N_COMPONENTS))
     for i, (window_size, components) in enumerate(conditions):
-        if window_size < components:
-            continue
-        detectors = [
-            anomaly_detection.BaseRollingAnomalyDetector(
-                features=features,
-                window_size=window_size,
-                max_missing_days=MAX_MISSING_DAYS,
-            )
-        ]
-        pc_detectors = [
-            anomaly_detection.PCARollingAnomalyDetector,
-            #anomaly_detection.NMFRollingAnomalyDetector,
-        ]
-        for pc_detector in pc_detectors:
-            detectors.append(
-                pc_detector(
-                    features=features,
-                    window_size=window_size,
-                    max_missing_days=MAX_MISSING_DAYS,
-                    n_components=components,
+        detectors = []
+        baseline = anomaly_detection.BaseRollingAnomalyDetector(
+            features=features,
+            window_size=window_size,
+            max_missing_days=MAX_MISSING_DAYS,
+        )
+        if components == N_COMPONENTS[0]:
+            detectors.append(baseline)
+
+        if window_size > components:
+            pc_detectors = [
+                anomaly_detection.PCARollingAnomalyDetector,
+                anomaly_detection.NMFRollingAnomalyDetector,
+            ]
+            for pc_detector in pc_detectors:
+                detectors.append(
+                    pc_detector(
+                        features=features,
+                        window_size=window_size,
+                        max_missing_days=MAX_MISSING_DAYS,
+                        n_components=components,
+                    )
                 )
-            )
-            dnames = [d.name for d in detectors]
+        if len(detectors) == 0:
+            continue
+        dnames = [d.name for d in detectors]
 
         print(
             f"\t {i+1} of {len(conditions)}: window_size: {window_size}, n_components: {components}"
         )
+
         def detectAnomalies(grouped) -> pd.DataFrame:
             index_cols = [
                 "subject_id",
@@ -110,9 +113,7 @@ if __name__ == "__main__":
                 re = detector.getReconstructionError(subject_data)
                 if sd_copy.shape[0] != re.shape[0]:
                     raise ValueError("Shape mismatch")
-                sd_copy = sd_copy.merge(
-                    re, validate='1:1', how='inner'
-                )
+                sd_copy = sd_copy.merge(re, validate="1:1", how="inner")
                 sd_copy["anomaly"] = detector.labelAnomaly(
                     subject_data, recalc_re=False
                 )
@@ -139,3 +140,5 @@ if __name__ == "__main__":
     anomalies_detected = pd.concat(anomalies_detected_list).reset_index()
     print("\nSaving results to", fpath)
     anomalies_detected.to_csv(fpath, index=False)
+    stop = time.perf_counter()
+    print(f"\nCompleted in {(stop - start)/60:0.2f} minutes")

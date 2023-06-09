@@ -13,6 +13,8 @@ import scipy.stats as stats
 from sklearn.utils._testing import ignore_warnings
 from sklearn.exceptions import ConvergenceWarning
 
+from mhealth_anomaly_detection.PCAgrid import PCAgrid
+
 
 # Base detector takes rolling mean of window size per feature
 class BaseRollingAnomalyDetector:
@@ -69,55 +71,52 @@ class BaseRollingAnomalyDetector:
             index=subject_data.index,
         )
 
-        if self.remove_past_anomalies:
-            # Calculate reconstruction error for each day
-            subject_data["anomaly_label"] = np.zeros(
-                subject_data.shape[0]
-            ).astype(bool)
-            for i in range(subject_data.shape[0]):
-                # RE only calculated with sufficient historical data
-                if i > (self.window_size):
-                    # Train on window_size days
-                    train = subject_data.iloc[i - self.window_size : i].dropna(
-                        subset=self.features
-                    )
-                    train = train[~train["anomaly_label"]]
-                    self.scaler.fit(train[self.features])
+        # Calculate reconstruction error for each day
+        subject_data["anomaly_label"] = np.zeros(subject_data.shape[0]).astype(
+            bool
+        )
+        for i in range(subject_data.shape[0]):
+            # RE only calculated with sufficient historical data
+            if i > (self.window_size):
+                # Train on window_size days
+                train = subject_data.iloc[i - self.window_size : i].dropna(
+                    subset=self.features
+                )
+                train = train[~train["anomaly_label"]]
+                self.scaler.fit(train[self.features])
 
-                    if train.shape[0] < (
-                        self.window_size - self.max_missing_days
-                    ):
-                        continue
+                if train.shape[0] < (self.window_size - self.max_missing_days):
+                    continue
 
-                    train[self.features] = train[self.features]
-                    # Training set + next day
-                    X = pd.DataFrame(
-                        self.scaler.transform(
-                            subject_data.iloc[i - self.window_size : i + 1][
-                                self.features
-                            ]
-                        )
+                train[self.features] = train[self.features]
+                # Training set + next day
+                X = pd.DataFrame(
+                    self.scaler.transform(
+                        subject_data.iloc[i - self.window_size : i + 1][
+                            self.features
+                        ]
                     )
+                )
 
-                    reconstruction = (
-                        pd.DataFrame(
-                            self.scaler.transform(train[self.features])
-                        )
-                        .rolling(
-                            window=self.window_size,
-                            min_periods=self.window_size
-                            - self.max_missing_days,
-                        )
-                        .mean()
+                reconstruction = (
+                    pd.DataFrame(self.scaler.transform(train[self.features]))
+                    .rolling(
+                        window=self.window_size,
+                        min_periods=self.window_size - self.max_missing_days,
                     )
-                    # Reconstruction error for out-of-training day kept
-                    re_df.iloc[i] = np.abs(
-                        reconstruction.iloc[-1] - X.iloc[-1]
-                    )
+                    .mean()
+                )
+                # Reconstruction error for out-of-training day kept
+                re_df.iloc[i] = np.abs(reconstruction.iloc[-1] - X.iloc[-1])
 
-                    # Clip reconstruction error to 10
-                    re_df[re_df > 10] = 10
-                    total_re = re_df[df_cols].copy().sum(axis=1, min_count=1)
+                # Clip reconstruction error to 10
+                re_df[re_df > 10] = 10
+                total_re = re_df[df_cols].copy().sum(axis=1, min_count=1)
+                use_re = total_re[
+                    (total_re.index >= (i - self.window_size))
+                    & (total_re.index <= i)
+                ]
+                if self.remove_past_anomalies:
                     use_re = total_re[
                         (total_re.index >= (i - self.window_size))
                         & (total_re.index <= i)
@@ -126,24 +125,6 @@ class BaseRollingAnomalyDetector:
                     subject_data.loc[
                         i, "anomaly_label"
                     ] = self.anomalyDecision(use_re)
-
-        else:
-            # reconstruction as rolling window_size mean
-            reconstruction = (
-                subject_data[self.features]
-                .rolling(
-                    window=self.window_size,
-                    min_periods=self.window_size - self.max_missing_days,
-                    closed="left",
-                )
-                .mean()
-            )
-            re_df[df_cols] = (
-                (subject_data[self.features] - reconstruction) / reconstruction
-            ).abs()
-
-            # Clip reconstruction error to 10
-            re_df[re_df > 10] = 10
 
         re_df["total_re"] = re_df[df_cols].sum(axis=1, min_count=1)
 
@@ -197,7 +178,7 @@ class BaseRollingAnomalyDetector:
             )
             .std()
         )
-        re_df['threshold'] = anomaly_threshold
+        re_df["threshold"] = anomaly_threshold
         return (re_df["total_re"] > re_df["threshold"]).reset_index(drop=True)
 
 
@@ -289,7 +270,7 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                 # If 0 variation across any variables skip
                 if np.sum((X.dropna().diff().dropna().sum() > 0)) <= 1:
                     continue
-                
+
                 reconstruction = pd.DataFrame(
                     self.model.inverse_transform(
                         self.model.transform(X.dropna())
@@ -363,6 +344,39 @@ class NMFRollingAnomalyDetector(PCARollingAnomalyDetector):
 
         self.name = "NMF" + "_" + str_nc
 
+class PCAGridRollingAnomalyDetector(PCARollingAnomalyDetector):
+    def __init__(
+        self,
+        features: list,
+        window_size: int = 7,
+        max_missing_days: int = 2,
+        n_components: int = 3,
+        re_std_threshold: float = 2.0,
+        remove_past_anomalies: bool = False,
+    ):
+        super().__init__(
+            features,
+            window_size,
+            max_missing_days,
+            n_components,
+            re_std_threshold,
+            remove_past_anomalies,
+        )
+        self.model = Pipeline(
+            [
+                ("scaler", StandardScaler()),
+                ("PCAgrid", PCAgrid(n_components=n_components)),
+            ]
+        )
+        str_nc = str(n_components)
+        self.named_step = "PCAgrid"
+
+        if n_components < 10:
+            str_nc = f"00{str_nc}"
+        elif n_components < 100:
+            str_nc = f"0{str_nc}"
+
+        self.name = "PCAgrid" + "_" + str_nc
 
 class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
     def __init__(

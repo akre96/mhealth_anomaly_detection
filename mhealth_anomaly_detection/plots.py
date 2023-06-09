@@ -77,7 +77,7 @@ def lineplot_features(
 
         # Label days with anomalies detected
         if anomaly_col is not None:
-            anomaly_days = data.loc[data[anomaly_col], "study_day"]
+            anomaly_days = data.loc[data[anomaly_col].dropna(), "study_day"]
             ylims = ax.get_ylim()
             ax.vlines(anomaly_days, *ylims, lw=2, color="red", alpha=0.3)
             ax.set_ylim(*ylims)
