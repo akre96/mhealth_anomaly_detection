@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "mhealth_anomaly_detection"
-version = "0.1.1"
+version = "0.1.2"
 description = ""
 authors = ["Samir Akre <samir.akre@gmail.com>"]
 
