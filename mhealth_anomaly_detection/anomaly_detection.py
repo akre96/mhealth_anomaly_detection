@@ -6,7 +6,7 @@ from tqdm.auto import tqdm
 from sklearn.decomposition import PCA, NMF
 from sklearn.ensemble import IsolationForest
 from sklearn.svm import OneClassSVM
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import average_precision_score
 import scipy.stats as stats
@@ -23,7 +23,7 @@ class BaseRollingAnomalyDetector:
         features: list,
         window_size: int = 7,
         max_missing_days: int = 2,
-        re_std_threshold: float = 2.0,
+        re_std_threshold: float = 1.65,
         remove_past_anomalies: bool = False,
     ):
         self.window_size = window_size
@@ -33,7 +33,7 @@ class BaseRollingAnomalyDetector:
         self.reconstruction_error: pd.DataFrame = pd.DataFrame()
         self.name = "RollingMean"
         self.remove_past_anomalies = remove_past_anomalies
-        self.scaler = StandardScaler()
+        self.scaler = MinMaxScaler()
 
     @staticmethod
     def validateInputData(subject_data: pd.DataFrame) -> None:
@@ -102,7 +102,6 @@ class BaseRollingAnomalyDetector:
                     pd.DataFrame(self.scaler.transform(train[self.features]))
                     .rolling(
                         window=self.window_size,
-                        min_periods=self.window_size - self.max_missing_days,
                     )
                     .mean()
                 )
@@ -144,11 +143,13 @@ class BaseRollingAnomalyDetector:
             continuous_output.rolling(
                 window=self.window_size,
                 min_periods=self.window_size - self.max_missing_days,
+                closed="left",
             ).mean()
             + self.re_std_threshold
             * continuous_output.rolling(
                 window=self.window_size,
                 min_periods=self.window_size - self.max_missing_days,
+                closed="left",
             ).std()
         )
         return continuous_output.iloc[-1] > anomaly_threshold.iloc[-1]
@@ -168,6 +169,7 @@ class BaseRollingAnomalyDetector:
             .rolling(
                 window=self.window_size,
                 min_periods=self.window_size - self.max_missing_days,
+                closed="left",
             )
             .mean()
             + self.re_std_threshold
@@ -175,6 +177,7 @@ class BaseRollingAnomalyDetector:
             .rolling(
                 window=self.window_size,
                 min_periods=self.window_size - self.max_missing_days,
+                closed="left",
             )
             .std()
         )
@@ -189,7 +192,7 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
         window_size: int = 7,
         max_missing_days: int = 2,
         n_components: int = 3,
-        re_std_threshold: float = 2,
+        re_std_threshold: float = 1.65,
         remove_past_anomalies: bool = False,
     ):
         super().__init__(
@@ -202,7 +205,7 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
         self.n_components = n_components
         self.model = Pipeline(
             [
-                ("scaler", StandardScaler()),
+                ("scaler", MinMaxScaler()),
                 ("pca", PCA(n_components=n_components, whiten=True)),
             ]
         )
@@ -243,6 +246,7 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
         subject_data["anomaly_label"] = np.zeros(subject_data.shape[0]).astype(
             bool
         )
+        # TODO: Find out why so man null values in reconstruction error
         for i in range(subject_data.shape[0]):
             # RE only calculated with sufficient historical data
             if i > (self.window_size):
@@ -250,7 +254,8 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                 train = subject_data.iloc[i - self.window_size : i].dropna(
                     subset=self.features
                 )
-                train = train[train["anomaly_label"] == False]
+                if self.remove_past_anomalies:
+                    train = train[train["anomaly_label"] == False]
                 if train.shape[0] < (self.window_size - self.max_missing_days):
                     continue
 
@@ -267,9 +272,14 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                 # If out of training day has null values skip
                 if np.any(X.iloc[-1].isnull()):
                     continue
+
                 # If 0 variation across any variables skip
-                if np.sum((X.dropna().diff().dropna().sum() > 0)) <= 1:
+                # NOTE: This is not a good check, as it will skip days with
+                # any feature with no variation
+                """
+                if np.sum((X.dropna().diff().dropna().sum().abs() > 0)) <= 1:
                     continue
+                """
 
                 reconstruction = pd.DataFrame(
                     self.model.inverse_transform(
@@ -278,17 +288,17 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                     columns=self.features,
                 )
                 # Reconstruction error for out-of-training day kept
-                re_df.iloc[i] = (
-                    np.abs(
-                        self.model.named_steps["scaler"].transform(X.dropna())
-                        - self.model.named_steps["scaler"].transform(
-                            reconstruction
-                        )
-                    )
-                )[-1]
+                X_scaled = self.model.named_steps["scaler"].transform(
+                    X.dropna()
+                )
+                recon_scaled = self.model.named_steps["scaler"].transform(
+                    reconstruction
+                )
+                re_df.iloc[i] = (np.abs(X_scaled - recon_scaled))[-1]
 
-                # Clip reconstruction error to 10
+                # Clip reconstruction error between 10e-10 to 10
                 re_df[re_df > 10] = 10
+                re_df[re_df.abs() < 1e-14] = 0
                 if self.remove_past_anomalies:
                     total_re = re_df[df_cols].sum(axis=1, min_count=1)
                     use_re = total_re[
@@ -300,7 +310,7 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                         i, "anomaly_label"
                     ] = self.anomalyDecision(use_re)
 
-        re_df["total_re"] = (re_df).sum(axis=1, min_count=1)
+        re_df["total_re"] = re_df.sum(axis=1, min_count=1)
         re_df["study_day"] = subject_data["study_day"]
 
         # Store pca components in detector class
@@ -317,7 +327,7 @@ class NMFRollingAnomalyDetector(PCARollingAnomalyDetector):
         window_size: int = 7,
         max_missing_days: int = 2,
         n_components: int = 3,
-        re_std_threshold: float = 2.0,
+        re_std_threshold: float = 1.65,
         remove_past_anomalies: bool = False,
     ):
         super().__init__(
@@ -330,7 +340,7 @@ class NMFRollingAnomalyDetector(PCARollingAnomalyDetector):
         )
         self.model = Pipeline(
             [
-                ("scaler", MinMaxScaler(clip=True)),
+                ("scaler", NMFScaler()),
                 ("nmf", NMF(n_components=n_components, max_iter=1000)),
             ]
         )
@@ -344,6 +354,7 @@ class NMFRollingAnomalyDetector(PCARollingAnomalyDetector):
 
         self.name = "NMF" + "_" + str_nc
 
+
 class PCAGridRollingAnomalyDetector(PCARollingAnomalyDetector):
     def __init__(
         self,
@@ -351,7 +362,7 @@ class PCAGridRollingAnomalyDetector(PCARollingAnomalyDetector):
         window_size: int = 7,
         max_missing_days: int = 2,
         n_components: int = 3,
-        re_std_threshold: float = 2.0,
+        re_std_threshold: float = 1.65,
         remove_past_anomalies: bool = False,
     ):
         super().__init__(
@@ -364,7 +375,7 @@ class PCAGridRollingAnomalyDetector(PCARollingAnomalyDetector):
         )
         self.model = Pipeline(
             [
-                ("scaler", StandardScaler()),
+                ("scaler", MinMaxScaler()),
                 ("PCAgrid", PCAgrid(n_components=n_components)),
             ]
         )
@@ -377,6 +388,7 @@ class PCAGridRollingAnomalyDetector(PCARollingAnomalyDetector):
             str_nc = f"0{str_nc}"
 
         self.name = "PCAgrid" + "_" + str_nc
+
 
 class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
     def __init__(
@@ -399,7 +411,7 @@ class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
         self.n_components = n_components
         self.model = Pipeline(
             [
-                ("scaler", StandardScaler()),
+                ("scaler", MinMaxScaler()),
                 ("svm", OneClassSVM(degree=n_components, kernel=kernel)),
             ]
         )
@@ -493,7 +505,10 @@ def binaryPerformanceMetrics(
     performance_dict["false_positives"] = []
     performance_dict["false_negatives"] = []
 
-    for info, subject_data in tqdm(data.groupby(groupby_cols)):
+    gc = groupby_cols
+    if len(groupby_cols) == 1:
+        gc = groupby_cols[0]
+    for info, subject_data in tqdm(data.groupby(gc)):
         subject_data["anomaly"] = subject_data["anomaly"].astype(bool)
         # Fix error if only one groupby item, info is a string, not a tuple[str]
         if type(info) == str:
@@ -603,7 +618,10 @@ def distance_real_to_detected_anomaly(
     anomaly_detector_distances = []
 
     models = [c.split("_anomaly")[0] for c in anomaly_detector_cols]
-    for info, subject_data in tqdm(data.groupby(groupby_cols)):
+    gc = groupby_cols
+    if len(groupby_cols) == 1:
+        gc = groupby_cols[0]
+    for info, subject_data in tqdm(data.groupby(gc)):
         for model in models:
             subject_data[model + "_anomaly"] = subject_data[
                 model + "_anomaly"
@@ -682,6 +700,14 @@ if __name__ == "__main__":
                 break
 
 
+# MinMax scaler but transform returns 0 for values < 0
+class NMFScaler(MinMaxScaler):
+    def transform(self, X):
+        X = super().transform(X)
+        X[X < 0] = 0
+        return X
+
+
 def correlateDetectedToOutcome(
     detected_anomalies: pd.DataFrame,
     anomaly_detector_cols: List[str],
@@ -695,7 +721,10 @@ def correlateDetectedToOutcome(
         "n": [],
         **{inf: [] for inf in groupby_cols},
     }
-    for info, i_df in detected_anomalies.groupby(groupby_cols):
+    gc = groupby_cols
+    if len(groupby_cols) == 1:
+        gc = groupby_cols[0]
+    for info, i_df in detected_anomalies.groupby(gc):
         for d in anomaly_detector_cols:
             d_df = i_df[[d, outcome_col]].dropna()
             n = d_df.shape[0]

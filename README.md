@@ -22,3 +22,5 @@
 
 
 
+## R Dependencies
+- Requires R (4.2.3) for PCAGrid anomaly detection. Package `pcaPP` (2.0-3)

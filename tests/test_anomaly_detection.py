@@ -4,7 +4,8 @@ import numpy as np
 import pytest
 
 N_DAYS = 10
-N_FEATURES = 3
+WINDOW_SIZE = 3
+N_FEATURES = 4
 FEATURES = {
     f"example_feature_{i}": 1 + np.arange(N_DAYS) * i
     for i in range(N_FEATURES)
@@ -14,41 +15,61 @@ TEST_DATA = pd.DataFrame(
 )
 
 
+@pytest.fixture(params=[0, 1])
+def anomaly_data(request):
+    np.random.seed(1)
+    test_data = TEST_DATA.copy()
+    n_anomalies = request.param
+    start = 5
+    for i in range(N_FEATURES):
+        test_data[f"example_feature_{i}"] = (
+            np.random.normal(0, 0.1, N_DAYS) + start
+        )
+        if n_anomalies > 0:
+            test_data.loc[test_data.index[-1], f"example_feature_{i}"] = 100
+    yield n_anomalies, test_data
+
+
 # All anomaly detectors
-@pytest.fixture(params=[
-    ad.BaseRollingAnomalyDetector,
-    ad.PCARollingAnomalyDetector,
-    ad.NMFRollingAnomalyDetector,
-    ad.PCAGridRollingAnomalyDetector,
-    ad.IFRollingAnomalyDetector,
-    ad.SVMRollingAnomalyDetector,
-])
+@pytest.fixture(
+    params=[
+        ad.BaseRollingAnomalyDetector,
+        ad.PCARollingAnomalyDetector,
+        ad.NMFRollingAnomalyDetector,
+        ad.PCAGridRollingAnomalyDetector,
+        ad.IFRollingAnomalyDetector,
+        ad.SVMRollingAnomalyDetector,
+    ]
+)
 def anomaly_detector_all(request):
     print(str(request.param))
     yield request.param(
         features=list(FEATURES.keys()),
-        window_size=3,
+        window_size=WINDOW_SIZE,
     )
 
+
 # Only anomaly detectors with reconstruction error
-@pytest.fixture(params=[
-    ad.BaseRollingAnomalyDetector,
-    ad.PCARollingAnomalyDetector,
-    ad.NMFRollingAnomalyDetector,
-    ad.PCAGridRollingAnomalyDetector,
-])
+@pytest.fixture(
+    params=[
+        ad.BaseRollingAnomalyDetector,
+        ad.PCARollingAnomalyDetector,
+        ad.NMFRollingAnomalyDetector,
+        ad.PCAGridRollingAnomalyDetector,
+    ]
+)
 def anomaly_detector_re(request):
     print(str(request.param))
     yield request.param(
         features=list(FEATURES.keys()),
-        window_size=3,
+        window_size=WINDOW_SIZE,
+        re_std_threshold=2,
     )
 
 
 # Test that base detector outputs expected type and shape
-def test_input_output_base(anomaly_detector_all):
-    test_data = TEST_DATA.copy()
-    print(test_data)
+def test_input_output_base(anomaly_detector_all, anomaly_data):
+    n_anomalies, test_data = anomaly_data
     re_df = anomaly_detector_all.getReconstructionError(test_data)
 
     # in re_df expect 2 column + 1 column per feature
@@ -69,13 +90,28 @@ def test_input_output_base_missing_day(anomaly_detector_re):
     assert error
 
 
-def test_input_output_base_remove_anom(anomaly_detector_re):
-    test_data = TEST_DATA
-    print(test_data)
+def test_input_output_base_remove_anom(anomaly_detector_re, anomaly_data):
+    n_anomalies, test_data = anomaly_data
+    anomaly_detector_re.remove_past_anomalies = True
     re_df = anomaly_detector_re.getReconstructionError(test_data)
 
     # in re_df expect 2 column + 1 column per feature
     assert re_df.shape == (N_DAYS, N_FEATURES + 2)
+
+
+def test_detects_anomaly(anomaly_detector_re, anomaly_data):
+    n_anomalies, test_data = anomaly_data
+    test_data["anomaly"] = anomaly_detector_re.labelAnomaly(test_data)
+    re = anomaly_detector_re.getReconstructionError(test_data)
+    test_data["total_re"] = re["total_re"]
+
+    # Ensure reconstruction error is calculated for all possible days
+    print(re)
+    assert re.total_re.isnull().sum() == WINDOW_SIZE + 1
+
+    # Ensure proper number of anomalies detected
+    print(test_data[["total_re", "anomaly"]])
+    assert test_data.anomaly.sum() == n_anomalies
 
 
 def test_input_output_pc_methods_na_value():
@@ -83,7 +119,7 @@ def test_input_output_pc_methods_na_value():
     test_data = TEST_DATA.copy()
 
     # Set 1 value to NaN
-    test_data[list(FEATURES.keys())[1]].iloc[2] = np.nan
+    test_data[test_data.index[2], list(FEATURES.keys())[1]] = np.nan
     detectors = [
         ad.PCARollingAnomalyDetector(
             features=list(FEATURES.keys()),
@@ -100,7 +136,9 @@ def test_input_output_pc_methods_na_value():
     ]
 
     for detector in detectors:
-        re_df = detector.getReconstructionError(test_data)
+        # Ignoring divide by 0 warnings for PCA
+        with np.errstate(divide="ignore", invalid="ignore"):
+            re_df = detector.getReconstructionError(test_data)
         components = detector.components
 
         # in re_df expect 2 column + 1 column per feature
@@ -146,7 +184,7 @@ def test_performance_metrics_perfect():
 
     # columns:
     #   Groupby col, sens, spec, accuracy, TN, TP, FN, FP, F1, Recall
-    assert metrics.shape == (1, 8 + N_FEATURES)
+    assert metrics.shape == (1, 11)
 
     assert metrics.true_positives.sum() == N_DAYS
     assert metrics.true_negatives.sum() == 0
