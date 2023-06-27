@@ -1,15 +1,12 @@
 import numpy as np
-from numpy.typing import ArrayLike, NDArray
-from typing import List, Literal
+from numpy.typing import ArrayLike
+from typing import Literal
 import pandas as pd
-from tqdm.auto import tqdm
 from sklearn.decomposition import PCA, NMF
 from sklearn.ensemble import IsolationForest
 from sklearn.svm import OneClassSVM
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import average_precision_score
-import scipy.stats as stats
 from sklearn.utils._testing import ignore_warnings
 from sklearn.exceptions import ConvergenceWarning
 
@@ -25,9 +22,19 @@ class BaseRollingAnomalyDetector:
         max_missing_days: int = 2,
         re_std_threshold: float = 1.65,
         remove_past_anomalies: bool = False,
+        n_components: int = 0,
     ):
         self.window_size = window_size
         self.max_missing_days = max_missing_days
+
+        # Days of enough reconstruction error to calculate anomaly
+        # decision. If window_size = 7, max_missing_days = 2, then
+        # min_periods = 5, requires 7 days of data, but can have 2
+        # missing days
+        self.min_periods = self.window_size - self.max_missing_days
+        if self.min_periods < 1:
+            self.min_periods = 1
+
         self.features = features
         self.re_std_threshold = re_std_threshold
         self.reconstruction_error: pd.DataFrame = pd.DataFrame()
@@ -77,17 +84,22 @@ class BaseRollingAnomalyDetector:
         )
         for i in range(subject_data.shape[0]):
             # RE only calculated with sufficient historical data
-            if i > (self.window_size):
+            if i >= (self.window_size):
                 # Train on window_size days
                 train = subject_data.iloc[i - self.window_size : i].dropna(
                     subset=self.features
                 )
-                train = train[~train["anomaly_label"]]
-                self.scaler.fit(train[self.features])
+
+                if train.empty:
+                    continue
+
+                if self.remove_past_anomalies:
+                    train = train[~train["anomaly_label"]]
 
                 if train.shape[0] < (self.window_size - self.max_missing_days):
                     continue
 
+                self.scaler.fit(train[self.features])
                 train[self.features] = train[self.features]
                 # Training set + next day
                 X = pd.DataFrame(
@@ -142,13 +154,13 @@ class BaseRollingAnomalyDetector:
         anomaly_threshold = (
             continuous_output.rolling(
                 window=self.window_size,
-                min_periods=self.window_size - self.max_missing_days,
+                min_periods=self.min_periods,
                 closed="left",
             ).mean()
             + self.re_std_threshold
             * continuous_output.rolling(
                 window=self.window_size,
-                min_periods=self.window_size - self.max_missing_days,
+                min_periods=self.min_periods,
                 closed="left",
             ).std()
         )
@@ -168,7 +180,7 @@ class BaseRollingAnomalyDetector:
             re_df["total_re"]
             .rolling(
                 window=self.window_size,
-                min_periods=self.window_size - self.max_missing_days,
+                min_periods=self.min_periods,
                 closed="left",
             )
             .mean()
@@ -176,13 +188,13 @@ class BaseRollingAnomalyDetector:
             * re_df["total_re"]
             .rolling(
                 window=self.window_size,
-                min_periods=self.window_size - self.max_missing_days,
+                min_periods=self.min_periods,
                 closed="left",
             )
             .std()
         )
         re_df["threshold"] = anomaly_threshold
-        return (re_df["total_re"] > re_df["threshold"]).reset_index(drop=True)
+        return re_df["total_re"] > re_df["threshold"]
 
 
 class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
@@ -202,6 +214,7 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
             re_std_threshold,
             remove_past_anomalies,
         )
+        self.min_features_changing = 1
         self.n_components = n_components
         self.model = Pipeline(
             [
@@ -246,17 +259,27 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
         subject_data["anomaly_label"] = np.zeros(subject_data.shape[0]).astype(
             bool
         )
-        # TODO: Find out why so man null values in reconstruction error
         for i in range(subject_data.shape[0]):
             # RE only calculated with sufficient historical data
-            if i > (self.window_size):
+            if i >= (self.window_size):
                 # Train on window_size days
                 train = subject_data.iloc[i - self.window_size : i].dropna(
                     subset=self.features
                 )
+
                 if self.remove_past_anomalies:
                     train = train[train["anomaly_label"] == False]
-                if train.shape[0] < (self.window_size - self.max_missing_days):
+
+                if (
+                    train.shape[0] < (self.window_size - self.max_missing_days)
+                ) or train.empty:
+                    continue
+
+                # If 0 variation across any variables skip
+                n_params_changing = np.sum(
+                    (train[self.features].dropna().diff().abs().sum() > 0)
+                )
+                if n_params_changing < self.min_features_changing:
                     continue
 
                 self.model.fit(train[self.features])
@@ -272,14 +295,6 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                 # If out of training day has null values skip
                 if np.any(X.iloc[-1].isnull()):
                     continue
-
-                # If 0 variation across any variables skip
-                # NOTE: This is not a good check, as it will skip days with
-                # any feature with no variation
-                """
-                if np.sum((X.dropna().diff().dropna().sum().abs() > 0)) <= 1:
-                    continue
-                """
 
                 reconstruction = pd.DataFrame(
                     self.model.inverse_transform(
@@ -344,6 +359,7 @@ class NMFRollingAnomalyDetector(PCARollingAnomalyDetector):
                 ("nmf", NMF(n_components=n_components, max_iter=1000)),
             ]
         )
+        self.min_features_changing = 3
         str_nc = str(n_components)
         self.named_step = "nmf"
 
@@ -417,9 +433,16 @@ class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
         )
         self.name = "SVM" + "_" + str(kernel)
 
+    def getReconstructionError(
+        self, subject_data: pd.DataFrame
+    ) -> pd.DataFrame:
+        raise NotImplementedError(
+            f"{self.name} does not have reconstruction error"
+        )
+
     def labelAnomaly(
         self, subject_data: pd.DataFrame, continuous: bool = False, **kwargs
-    ) -> NDArray:
+    ) -> pd.Series:
         anomaly_continuous = np.full(subject_data.shape[0], 0)
         anomaly_labels = np.full(subject_data.shape[0], 0)
         # Predict if last day of window anomalous
@@ -458,10 +481,10 @@ class SVMRollingAnomalyDetector(BaseRollingAnomalyDetector):
                 anomaly_labels[i] = self.model.predict(X.dropna())[-1] == 1
         if not continuous:
             anomaly_labels[anomaly_labels == -1.0] = 0
-            return anomaly_labels == 1
-        return anomaly_continuous
+            return pd.Series(anomaly_labels == 1, index=subject_data.index)
+        return pd.Series(anomaly_continuous, index=subject_data.index)
 
-    def getContinuous(self, subject_data, **kwargs) -> NDArray:
+    def getContinuous(self, subject_data, **kwargs) -> pd.Series:
         return self.labelAnomaly(subject_data, continuous=True)
 
 
@@ -486,192 +509,12 @@ class IFRollingAnomalyDetector(SVMRollingAnomalyDetector):
         self.features = features
 
 
-# Calculate accuracy, sensitivity and specificity
-def binaryPerformanceMetrics(
-    data: pd.DataFrame,
-    anomaly_detector_cols: List[str],
-    groupby_cols: List[str] = [
-        "subject_id",
-        "history_type",
-        "window_size",
-        "anomaly_freq",
-    ],
-) -> pd.DataFrame:
-    models = [c.split("_anomaly")[0] for c in anomaly_detector_cols]
-    performance_dict = {c: [] for c in groupby_cols}
-    performance_dict["model"] = []
-    performance_dict["true_positives"] = []
-    performance_dict["true_negatives"] = []
-    performance_dict["false_positives"] = []
-    performance_dict["false_negatives"] = []
-
-    gc = groupby_cols
-    if len(groupby_cols) == 1:
-        gc = groupby_cols[0]
-    for info, subject_data in tqdm(data.groupby(gc)):
-        subject_data["anomaly"] = subject_data["anomaly"].astype(bool)
-        # Fix error if only one groupby item, info is a string, not a tuple[str]
-        if type(info) == str:
-            info = [info]
-        for model in models:
-            subject_data[model + "_anomaly"] = subject_data[
-                model + "_anomaly"
-            ].astype(bool)
-            for i, val in enumerate(info):
-                performance_dict[groupby_cols[i]].append(val)
-            performance_dict["model"].append(model)
-            performance_dict["true_positives"].append(
-                (
-                    subject_data["anomaly"] & subject_data[model + "_anomaly"]
-                ).sum()
-            )
-            performance_dict["true_negatives"].append(
-                (
-                    ~subject_data["anomaly"]
-                    & ~subject_data[model + "_anomaly"]
-                ).sum()
-            )
-            performance_dict["false_negatives"].append(
-                (
-                    subject_data["anomaly"] & ~subject_data[model + "_anomaly"]
-                ).sum()
-            )
-            performance_dict["false_positives"].append(
-                (
-                    ~subject_data["anomaly"] & subject_data[model + "_anomaly"]
-                ).sum()
-            )
-
-    performance_df = pd.DataFrame(performance_dict)
-    performance_df["sensitivity"] = performance_df["true_positives"] / (
-        performance_df["true_positives"] + performance_df["false_negatives"]
-    )
-    performance_df["precision"] = performance_df["true_positives"] / (
-        performance_df["true_positives"] + performance_df["false_positives"]
-    )
-    performance_df["specificity"] = performance_df["true_negatives"] / (
-        performance_df["true_negatives"] + performance_df["false_positives"]
-    )
-    performance_df["accuracy"] = performance_df[
-        ["true_positives", "true_negatives"]
-    ].sum(axis=1) / performance_df[
-        [
-            "true_positives",
-            "true_negatives",
-            "false_positives",
-            "false_negatives",
-        ]
-    ].sum(
-        axis=1
-    )
-    performance_df["F1"] = (
-        2
-        * performance_df["sensitivity"]
-        * performance_df["precision"]
-        / performance_df[["sensitivity", "precision"]].sum(axis=1)
-    )
-    return performance_df
-
-
-def continuousPerformanceMetrics(
-    data: pd.DataFrame,
-    anomaly_detector_cols: List[str],
-    groupby_cols: List[str] = [
-        "subject_id",
-        "history_type",
-        "window_size",
-        "anomaly_freq",
-    ],
-) -> pd.DataFrame:
-    models = [c.split("_anomaly_score")[0] for c in anomaly_detector_cols]
-    performance_dict = {c: [] for c in groupby_cols}
-    performance_dict["model"] = []
-    performance_dict["average_precision"] = []
-
-    for info, subject_data in tqdm(data.groupby(groupby_cols)):
-        # Fix error if one groupby item: info is a string, not a tuple[str]
-        if type(info) == str:
-            info = [info]
-
-        for model in models:
-            for i, val in enumerate(info):
-                performance_dict[groupby_cols[i]].append(val)
-            score_col = f"{model}_anomaly_score"
-            use_df = subject_data[["anomaly", score_col]].dropna()
-            performance_dict["model"].append(model)
-            performance_dict["average_precision"].append(
-                average_precision_score(
-                    use_df["anomaly"],
-                    use_df[f"{model}_anomaly_score"],
-                )
-            )
-    performance_df = pd.DataFrame(performance_dict)
-    return performance_df
-
-
-# Find distance of induced anomaly to closest detected anomaly
-def distance_real_to_detected_anomaly(
-    data: pd.DataFrame,
-    groupby_cols: List[str],
-    anomaly_detector_cols: List[str],
-) -> pd.DataFrame:
-    anomaly_detector_distances = []
-
-    models = [c.split("_anomaly")[0] for c in anomaly_detector_cols]
-    gc = groupby_cols
-    if len(groupby_cols) == 1:
-        gc = groupby_cols[0]
-    for info, subject_data in tqdm(data.groupby(gc)):
-        for model in models:
-            subject_data[model + "_anomaly"] = subject_data[
-                model + "_anomaly"
-            ].astype(bool)
-        subject_data["anomaly"] = subject_data["anomaly"].astype(bool)
-        # day of detected anomaly
-        anomaly_days = {
-            c: subject_data.loc[
-                subject_data[c + "_anomaly"], "study_day"
-            ].values
-            for c in models
-        }
-
-        # Actual induced anomalies
-        real_anomaly = subject_data.loc[
-            subject_data["anomaly"], "study_day"
-        ].values
-
-        # Initialize with NaN values
-        anomaly_distance = {
-            c: np.full(real_anomaly.shape, np.nan) for c in models
-        }
-        # Calculate distance for each induced anomaly to closest future detected anomaly
-        for i in range(real_anomaly.shape[0]):
-            for c in models:
-                distances = anomaly_days[c] - real_anomaly[i]
-                pos_distances = distances[distances >= 0]
-
-                # If no future detected anomaly, fill distance with np.nan
-                if np.any(pos_distances >= 0):
-                    min_pos = np.min(pos_distances)
-                else:
-                    min_pos = np.nan
-                anomaly_distance[c][i] = min_pos
-
-        anomaly_distance = pd.DataFrame(anomaly_distance)
-        anomaly_distance["study_day"] = real_anomaly
-        for i, c in enumerate(groupby_cols):
-            anomaly_distance[c] = info[i]
-        anomaly_detector_distances.append(anomaly_distance)
-
-    # for each detector's anomalies, find closest day of real anomaly on or after detected, and calculate distance
-    # If no real anomaly before detected anomaly, distance = np.nan
-    anomaly_detector_distance_df = pd.concat(anomaly_detector_distances)
-    anomaly_detector_distance_df = anomaly_detector_distance_df.melt(
-        id_vars=["study_day", *groupby_cols],
-        var_name="model",
-        value_name="distance",
-    )
-    return anomaly_detector_distance_df
+# MinMax scaler but transform returns 0 for values < 0
+class NMFScaler(MinMaxScaler):
+    def transform(self, X):
+        X = super().transform(X)
+        X[X < 0] = 0
+        return X
 
 
 if __name__ == "__main__":
@@ -698,75 +541,3 @@ if __name__ == "__main__":
                 re["anomaly"] = anomalyDetector.labelAnomaly(re)
                 print(re)
                 break
-
-
-# MinMax scaler but transform returns 0 for values < 0
-class NMFScaler(MinMaxScaler):
-    def transform(self, X):
-        X = super().transform(X)
-        X[X < 0] = 0
-        return X
-
-
-def correlateDetectedToOutcome(
-    detected_anomalies: pd.DataFrame,
-    anomaly_detector_cols: List[str],
-    outcome_col: str,
-    groupby_cols: List[str],
-) -> pd.DataFrame:
-    corr_dict = {
-        "detector": [],
-        "rho": [],
-        "p": [],
-        "n": [],
-        **{inf: [] for inf in groupby_cols},
-    }
-    gc = groupby_cols
-    if len(groupby_cols) == 1:
-        gc = groupby_cols[0]
-    for info, i_df in detected_anomalies.groupby(gc):
-        for d in anomaly_detector_cols:
-            d_df = i_df[[d, outcome_col]].dropna()
-            n = d_df.shape[0]
-            if (d_df[d].nunique() == 1) or (d_df[outcome_col].nunique() == 1):
-                rho, p = (0, 1)
-            else:
-                rho, p = stats.spearmanr(d_df[d], d_df[outcome_col])
-            corr_dict["detector"].append(d)
-            for i in range(len(groupby_cols)):
-                corr_dict[groupby_cols[i]].append(info[i])
-            corr_dict["n"].append(n)
-            corr_dict["rho"].append(rho)
-            corr_dict["p"].append(p)
-    return pd.DataFrame(corr_dict).rename(
-        {c: c.split("_anomaly")[0] for c in anomaly_detector_cols}
-    )
-
-
-# Correlation between # detected and induced anomalies in simulation
-def correlateDetectedToInduced(
-    data: pd.DataFrame,
-    anomaly_detector_cols: List[str],
-    groupby_cols: List[str],
-    corr_across: List[str],
-) -> pd.DataFrame:
-    for c in corr_across:
-        if c not in groupby_cols:
-            raise ValueError(
-                f"corr_across value {c} not found in groupby_cols"
-            )
-
-    # Ensure bool
-    for c in ["anomaly", *anomaly_detector_cols]:
-        data[c] = data[c].astype(bool)
-
-    # Anomalies detected per subject/model
-    detected_anomalies = (
-        data.groupby(groupby_cols)[["anomaly"] + anomaly_detector_cols]
-        .sum(numeric_only=False)
-        .reset_index()
-    )
-
-    return correlateDetectedToOutcome(
-        detected_anomalies, anomaly_detector_cols, "anomaly", corr_across
-    )

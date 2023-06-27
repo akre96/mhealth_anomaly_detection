@@ -3,6 +3,7 @@ import pandas as pd
 from mhealth_anomaly_detection.datasets import GLOBEM
 
 
+## GLOBEM Study surveys load
 def test_GLOBEM_survey():
     dataset = GLOBEM(
         data_path="~/Data/mHealth_external_datasets/GLOBEM",
@@ -14,7 +15,7 @@ def test_GLOBEM_survey():
     assert surveys.shape == (2051, 3)
 
 
-def test_PHQ_periods():
+def test_GLOBEM_PHQ_periods():
     gap = 5
     ndays = 100
     sim_data = pd.DataFrame(

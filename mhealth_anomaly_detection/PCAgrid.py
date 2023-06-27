@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from rpy2.robjects.packages import importr, PackageNotInstalledError
 from rpy2.robjects import r, rinterface, vectors
+from rpy2.rinterface_lib.embedded import RRuntimeError
 
 
 class PCAgrid:
@@ -29,7 +30,21 @@ class PCAgrid:
         if isinstance(X, pd.DataFrame):
             X = X.to_numpy()
         r_matrix = self.dataToRMatrix(X)
-        self.model = self.pcaPP.PCAgrid(r_matrix, k=self.n_components)
+        try:
+            self.model = self.pcaPP.PCAgrid(
+                r_matrix, k=self.n_components, maxiter=1000
+            )
+        except RRuntimeError as e:
+            print(e)
+            print("Rerunning PCAgrid with center=median")
+            self.model = self.pcaPP.PCAgrid(
+                r_matrix,
+                k=self.n_components,
+                maxiter=1000,
+                trace=2,
+                center="median",
+            )
+
         self.loadings = np.array(self.model.rx2("loadings"))
         self.components_ = self.loadings.T
         self.means = np.array(self.model.rx2("center"))

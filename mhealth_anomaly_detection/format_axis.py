@@ -7,6 +7,7 @@ from matplotlib import rcParams
 
 def setup_style():
     rcParams["font.family"] = "Arial"
+    rcParams["figure.dpi"] = 300
 
 
 def despine_thicken_axes(

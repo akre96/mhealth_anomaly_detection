@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from typing import List
+from typing import List, Literal
 from tqdm.auto import tqdm
 
 
@@ -18,13 +18,16 @@ class DatasetBase:
         self.data = self.preprocess(self.data_raw)
         self.id_cols = []
 
-    def addStudyDay(self, data) -> pd.DataFrame:
+    def addStudyDay(
+        self, data, first_days: pd.DataFrame | None = None
+    ) -> pd.DataFrame:
         # Get first date of participant
-        first_days = (
-            pd.DataFrame(data.groupby("subject_id")["date"].min())
-            .reset_index()
-            .rename(columns={"date": "first_day"})
-        )
+        if first_days is None:
+            first_days = (
+                pd.DataFrame(data.groupby("subject_id")["date"].min())
+                .reset_index()
+                .rename(columns={"date": "first_day"})
+            )
 
         # Set study day as relative days in study
         reform_data = data.merge(first_days, validate="m:1")
@@ -50,7 +53,7 @@ class BRIGHTEN_v2(DatasetBase):
             raise FileNotFoundError(
                 f"{data_path} must be a folder to BIRGHTEN data"
             )
-        self.data_path = data_path
+        self.data_path = Path(data_path)
         self.feature_types = feature_types
         self.features = []
         self.id_cols = ["subject_id", "date", "week"]
@@ -61,13 +64,194 @@ class BRIGHTEN_v2(DatasetBase):
         data = self.filterByStudyLength(data_raw, min_weeks=8)
         data = self.addStudyDay(data)
         data = fillEmptyDays(data)
+        data["came_to_work"] = data["came_to_work"].astype(bool).astype(float)
         return data
 
-    def getDemographics(self):
-        demo = pd.read_csv(Path(self.data_path, "demographics.csv"))
-        demo = demo.rename(columns={"participant_id": "subject_id"})
-        demo_v2 = demo[demo.study == "Brighten-v2"]
+    def getTrainTestSplit(self):
+        train_test_split = pd.read_csv(
+            Path(self.data_path, "BRIGHTEN_v2_train_test_split.txt"), sep="\t"
+        )
+        # Batch column contains train test splitting
+        # Batch 1 = train, Batch 2 = test
+        train_test_split["batch"] = train_test_split.batch.astype("category")
+        train_test_split["marital_status_short"] = train_test_split[
+            "marital_status"
+        ].map(
+            {
+                "Married/Partner": "Married/Partner",
+                "Separated/Widowed/Divorced": "Sep/Wid/Div",
+                "Single": "Single",
+            }
+        )
+        return train_test_split
+
+    # Gets command for running ARTS.pl package to generate Train/Test Split
+    def generateARTSParams(self):
+        split_df = self.getParticipantSplitParameters()
+        param_cols = [str(i) for i in range(2, len(split_df.columns))]
+        ARTS_param_c = ",".join(param_cols) + ";" + ";".join(param_cols)
+        train_n = round(split_df.shape[0] * 0.7)
+        test_n = split_df.shape[0] - train_n
+
+        # Where numeric columns
+        is_numeric = np.where(split_df.dtypes.isin([int, np.float64]))[0]
+        ARTS_param_cc = ",".join([str(i + 1) for i in is_numeric])
+        ARTS_param_b = f"{train_n},{test_n}"
+
+        input_path = Path(self.data_path, "BRIGHTEN_v2_stratify.txt")
+        output_path = Path(self.data_path, "BRIGHTEN_v2_train_test_split.txt")
+        print("Saving input to ARTS to", input_path)
+        split_df.to_csv(input_path, sep="\t", index=False)
+
+        return f'src/ARTS.pl \\\n\t-i f{input_path} \\\n\t-o f{output_path} \\\n\t-c "{ARTS_param_c}" \\\n\t-b {ARTS_param_b} \\\n\t-cc {ARTS_param_cc}'
+
+    # Get demographic data
+    def getDemographics(self) -> pd.DataFrame:
+        demog = pd.read_csv(
+            Path(self.data_path, "demographics.csv"), parse_dates=["startdate"]
+        )
+        demog = demog.rename(columns={"participant_id": "subject_id"})
+        cat_cols = [
+            "gender",
+            "education",
+            "working",
+            "income_satisfaction",
+            "income_lastyear",
+            "marital_status",
+            "race",
+            "heard_about_us",
+            "device",
+            "study_arm",
+            "study",
+        ]
+        demog[cat_cols] = demog[cat_cols].astype("category")
+        demo_v2 = demog[demog.study == "Brighten-v2"]
         return demo_v2
+
+    # Get self report data
+    def getSelfReport(
+        self, self_report: Literal["GAD7", "sleep_quality", "SDS", "phq9"]
+    ) -> pd.DataFrame:
+        sr_cols = None
+        if self_report == "phq9":
+            return self.getPHQ9()
+        elif self_report == "SDS":
+            sr_cols = ["sds_1", "sds_2", "sds_3", "stress", "support"]
+        elif self_report == "GAD7":
+            sr_cols = [f"gad7_{i}" for i in range(1, 9)] + ["gad7_sum"]
+        elif self_report == "sleep_quality":
+            sr_cols = [f"sleep_{i}" for i in range(1, 4)]
+        else:
+            raise ValueError(f"Unknown self report {self_report}")
+        sr = pd.read_csv(Path(self.data_path, f"{self_report}.csv"))
+        sr["date"] = pd.to_datetime(pd.to_datetime(sr["dt_response"]).dt.date)
+        sr = sr.drop(columns=["dt_response"]).rename(
+            columns={"participant_id": "subject_id"}
+        )
+        sr_dedup = sr[["subject_id", "date"] + sr_cols].drop_duplicates(
+            subset=["subject_id", "date"], keep="last"
+        )
+        sr_dedup["self_report"] = self_report
+        print(
+            f"{self_report} duplicates:",
+            sr.shape[0] - sr_dedup.shape[0],
+            "of",
+            sr.shape[0],
+        )
+        return sr_dedup
+
+    def getPHQ9(self) -> pd.DataFrame:
+        baseline_phq9 = pd.read_csv(Path(self.data_path, "baseline_phq9.csv"))
+        baseline_phq9 = baseline_phq9.rename(
+            columns={
+                "participant_id": "subject_id",
+                "baselinePHQ9date": "date",
+            }
+        )
+        phq_items = [f"phq9_{i}" for i in range(1, 10)]
+        baseline_phq9["sum_phq9"] = baseline_phq9[phq_items].sum(axis=1)
+        baseline_phq9_v2 = baseline_phq9[
+            baseline_phq9.study == "Brighten-v2"
+        ].drop(columns=["study"])
+        baseline_phq9_v2["baseline"] = True
+
+        phq9 = pd.read_csv(Path(self.data_path, "phq9.csv"))
+        phq9 = phq9.rename(
+            columns={"participant_id": "subject_id", "phq9Date": "date"}
+        )
+        phq9["baseline"] = False
+        phq9_v2 = phq9[
+            phq9.subject_id.isin(baseline_phq9_v2.subject_id.unique())
+        ]
+
+        # Merge baseline and weekly phq9
+        merged_phq9 = pd.concat([phq9_v2, baseline_phq9_v2])
+        if (
+            merged_phq9.shape[0]
+            != phq9_v2.shape[0] + baseline_phq9_v2.shape[0]
+        ):
+            print(
+                merged_phq9.shape[0],
+                phq9_v2.shape[0],
+                baseline_phq9_v2.shape[0],
+            )
+            raise ValueError("Shape mismatch")
+        merged_phq9["date"] = pd.to_datetime(merged_phq9["date"])
+
+        phq9_dedup = merged_phq9.drop_duplicates(
+            subset=["subject_id", "date"], keep="last"
+        )
+        print(
+            "PHQ9 duplicates:",
+            merged_phq9.shape[0] - phq9_dedup.shape[0],
+            "of",
+            merged_phq9.shape[0],
+        )
+        phq9_dedup["self_report"] = "phq9"
+        return phq9_dedup
+
+    # Get data used to generate a train-test split of all data
+    def getParticipantSplitParameters(self) -> pd.DataFrame:
+        phq9 = self.getPHQ9()
+        baseline_phq9 = phq9[phq9.baseline]
+        demographics = self.getDemographics()
+        data_subjects = pd.DataFrame(
+            self.data[["subject_id"]]
+        ).drop_duplicates()
+
+        stratify_data = data_subjects.merge(
+            baseline_phq9[["subject_id", "sum_phq9"]],
+            how="inner",
+        )
+        print(
+            "missing PHQ from:",
+            data_subjects.subject_id.nunique()
+            - stratify_data.subject_id.nunique(),
+        )
+
+        strat_cols_demog = [
+            "gender",
+            "age",
+            "education",
+            "working",
+            "income_satisfaction",
+            "income_lastyear",
+            "marital_status",
+            "race",
+            "device",
+            "study_arm",
+        ]
+        stratify_data = stratify_data.merge(
+            demographics[["subject_id"] + strat_cols_demog],
+            how="inner",
+        )
+        print(
+            "missing demographics from:",
+            data_subjects.subject_id.nunique()
+            - stratify_data.subject_id.nunique(),
+        )
+
+        return stratify_data
 
     def getPassiveSensorData(self):
         id_cols = ["participant_id", "dt_passive", "week"]
@@ -87,7 +271,7 @@ class BRIGHTEN_v2(DatasetBase):
     def filterByStudyLength(self, data: pd.DataFrame, min_weeks: int = 8):
         weeks = data.groupby("subject_id").week.max()
         keep_ids = weeks[weeks >= min_weeks].index
-        return data[data.subject_id.isin(keep_ids)]
+        return data[data.subject_id.isin(keep_ids)].copy()
 
 
 class OPTIMA(DatasetBase):
@@ -388,7 +572,7 @@ class GLOBEM(DatasetBase):
             )
 
         print(
-            f"Filtering high missing participants - removing",
+            "Filtering high missing participants - removing",
             len(remove_participants),
             "from dataset",
         )

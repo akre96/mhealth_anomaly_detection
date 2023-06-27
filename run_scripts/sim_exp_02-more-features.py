@@ -76,6 +76,12 @@ def run_ad_on_simulated(
             max_missing_days=0,
             n_components=n_components,
         ),
+        anomaly_detection.PCAGridRollingAnomalyDetector(
+            features=features,
+            window_size=window_size,
+            max_missing_days=0,
+            n_components=n_components,
+        ),
         anomaly_detection.NMFRollingAnomalyDetector(
             features=features,
             window_size=window_size,

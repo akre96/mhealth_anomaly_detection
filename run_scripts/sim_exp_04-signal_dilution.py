@@ -1,4 +1,4 @@
-"""_summary_ Experiment 07: Extension of exp02, now comparing how having only
+"""_summary_ Experiment 04: Extension of exp02, now comparing how having only
 a few features have anomalies influences results
 _author_ Samir Akre <sakre@g.ucla.edu>
 
@@ -24,7 +24,7 @@ from mhealth_anomaly_detection.wrapper_functions import calcSimMetrics
 
 EXPERIMENT = "exp04"
 USE_CACHE = False
-PARALLEL = True
+PARALLEL = False
 NUM_CPUS = 6
 
 # Dataset parameters
@@ -73,6 +73,12 @@ def run_ad_on_simulated(
             features=features,
             window_size=window_size,
             max_missing_days=0,
+        ),
+        anomaly_detection.PCAGridRollingAnomalyDetector(
+            features=features,
+            window_size=window_size,
+            max_missing_days=0,
+            n_components=n_components,
         ),
         anomaly_detection.PCARollingAnomalyDetector(
             features=features,
@@ -192,8 +198,6 @@ if __name__ == "__main__":
             # Don't parallel process
             datasets = []
             for i, run_params in tqdm(enumerate(run_list)):
-                if i < 2:
-                    continue
                 datasets.append(run_ad_on_simulated(**run_params))
 
         data_df = pd.concat(datasets)
@@ -240,7 +244,11 @@ if __name__ == "__main__":
         plt.gcf().savefig(str(fname))
         plt.close()
 
-    print(performance_df.groupby("model").accuracy.describe().round(2))
+    print(
+        performance_cont_df.groupby("model")
+        .average_precision.describe()
+        .round(2)
+    )
 
     stop = time.perf_counter()
     print(f"\nCompleted in {stop - start:0.2f} seconds")

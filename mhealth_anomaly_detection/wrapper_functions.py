@@ -1,7 +1,7 @@
 """ Wrapper functions for commonly performed tasks
 """
 import pandas as pd
-from mhealth_anomaly_detection import anomaly_detection
+from mhealth_anomaly_detection import anomaly_performance_metrics
 
 
 def calcSimMetrics(data_df: pd.DataFrame, key_difference, groupby_cols):
@@ -21,7 +21,7 @@ def calcSimMetrics(data_df: pd.DataFrame, key_difference, groupby_cols):
 
     # Calculate correlation of # anomalies model detects to # induced
     print("\tSpearman R - detected vs induced anomalies")
-    corr = anomaly_detection.correlateDetectedToInduced(
+    corr = anomaly_performance_metrics.correlateDetectedToInduced(
         data=data_df,
         anomaly_detector_cols=anomaly_detector_cols,
         groupby_cols=groupby_cols,
@@ -36,15 +36,17 @@ def calcSimMetrics(data_df: pd.DataFrame, key_difference, groupby_cols):
 
     # Calculate accuracy, sensitivity, specificity
     print("\tAverage precision")
-    performance_cont_df = anomaly_detection.continuousPerformanceMetrics(
-        data=data_df,
-        groupby_cols=groupby_cols,
-        anomaly_detector_cols=anomaly_detector_cont_cols,
+    performance_cont_df = (
+        anomaly_performance_metrics.continuousPerformanceMetrics(
+            data=data_df,
+            groupby_cols=groupby_cols,
+            anomaly_detector_cols=anomaly_detector_cont_cols,
+        )
     )
 
     # Calculate accuracy, sensitivity, specificity
     print("\tAccuracy, sensitivity, specificity")
-    performance_df = anomaly_detection.binaryPerformanceMetrics(
+    performance_df = anomaly_performance_metrics.binaryPerformanceMetrics(
         data=data_df,
         groupby_cols=groupby_cols,
         anomaly_detector_cols=anomaly_detector_cols,

@@ -29,7 +29,10 @@ from typing import Dict
 import seaborn as sns
 import matplotlib.pyplot as plt
 from mhealth_anomaly_detection import simulate_daily
-from mhealth_anomaly_detection import anomaly_detection
+from mhealth_anomaly_detection import (
+    anomaly_detection,
+    anomaly_performance_metrics,
+)
 from mhealth_anomaly_detection import format_axis as fa
 from mhealth_anomaly_detection.wrapper_functions import calcSimMetrics
 

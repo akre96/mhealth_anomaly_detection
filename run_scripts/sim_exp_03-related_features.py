@@ -27,8 +27,8 @@ from mhealth_anomaly_detection import format_axis as fa
 from mhealth_anomaly_detection.wrapper_functions import calcSimMetrics
 
 EXPERIMENT = "exp03"
-USE_CACHE = True
-PARALLEL = True
+USE_CACHE = False
+PARALLEL = False
 
 # Dataset parameters
 N_SUBJECTS = 100
@@ -94,6 +94,12 @@ def run_ad_on_simulated(
             max_missing_days=0,
         ),
         anomaly_detection.PCARollingAnomalyDetector(
+            features=features,
+            window_size=window_size,
+            max_missing_days=0,
+            n_components=n_components,
+        ),
+        anomaly_detection.PCAGridRollingAnomalyDetector(
             features=features,
             window_size=window_size,
             max_missing_days=0,
@@ -198,8 +204,6 @@ if __name__ == "__main__":
             # Don't parallel process
             datasets = []
             for i, run_params in tqdm(enumerate(run_list)):
-                if i < 2:
-                    continue
                 datasets.append(run_ad_on_simulated(**run_params))
 
         data_df = pd.concat(datasets)
