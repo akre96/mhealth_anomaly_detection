@@ -11,7 +11,6 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from itertools import product
-from p_tqdm import p_map
 from mhealth_anomaly_detection import datasets
 from mhealth_anomaly_detection import impute
 from mhealth_anomaly_detection import anomaly_detection
@@ -25,11 +24,11 @@ from sklearn.impute import IterativeImputer
 # Meta params
 NUM_CPUS = 10
 MAX_MISSING_DAYS = 2
-EXPERIMENT = "OPTIMA_exp01"
+EXPERIMENT = "OPTIMA_exp02"
 
 # Anomaly detector Parameters
 WINDOW_SIZES = [7, 14, 28]
-N_COMPONENTS = [5, 10, 20]
+N_COMPONENTS = [3]
 MIN_DAYS = 7
 MAX_MISSING_DAYS = 2
 
@@ -47,11 +46,21 @@ if __name__ == "__main__":
     # Load OPTIMA processed healthkit features
     folder = Path("cache")
     dataset = datasets.OPTIMA(
-        data_path="/Users/sakre/Data/OPTIMA/hk_features_Jul05-2023.csv"
+        data_path="/Users/sakre/Data/OPTIMA/hk_features_Sep04-2023.csv"
     )
     data = dataset.data
-    features = dataset.sensor_cols
-
+    sleep_features = [
+        "sleep_sleepDuration_day",
+        "sleep_sleepHR_day",
+        "sleep_sleepHRV_day",
+        "sleep_bedrestDuration_day",
+        "sleep_sleepEfficiency_day",
+        "sleep_sleepOnsetLatency_day",
+        "sleep_bedrestOnsetHours_day",
+        "sleep_bedrestOffsetHours_day",
+        "sleep_sleepOnsetHours_day",
+        "sleep_sleepOffsetHours_day",
+    ]
     # Impute missing values
     print("\nImputing dataset")
     imputer = IterativeImputer(
@@ -61,7 +70,7 @@ if __name__ == "__main__":
     )
 
     imputed = impute.rollingImpute(
-        data, features, MIN_DAYS, imputer, num_cpus=NUM_CPUS
+        data, sleep_features, MIN_DAYS, imputer, num_cpus=NUM_CPUS
     )
 
     anomalies_detected_list = []
@@ -71,7 +80,7 @@ if __name__ == "__main__":
         # Get anomaly detectors with different parameters
         detectors = []
         baseline = anomaly_detection.BaseRollingAnomalyDetector(
-            features=features,
+            features=sleep_features,
             window_size=window_size,
             max_missing_days=MAX_MISSING_DAYS,
         )
@@ -87,7 +96,7 @@ if __name__ == "__main__":
             for pc_detector in pc_detectors:
                 detectors.append(
                     pc_detector(
-                        features=features,
+                        features=sleep_features,
                         window_size=window_size,
                         max_missing_days=MAX_MISSING_DAYS,
                         n_components=components,

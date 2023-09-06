@@ -85,6 +85,62 @@ def lineplot_features(
     return fig, axes
 
 
+def heatmap_correlation(
+    data: pd.DataFrame,
+    **kwargs: Dict,
+) -> Axes:
+    params = {
+        "annot": kwargs.pop("annot", True),
+        "square": kwargs.pop("square", True),
+        "linewidths": kwargs.pop("linewidths", 0.5),
+        "cmap": kwargs.pop(
+            "cmap", sns.diverging_palette(230, 20, as_cmap=True)
+        ),
+        "center": kwargs.pop("center", 0),
+        "vmin": kwargs.pop("vmin", -1),
+        "vmax": kwargs.pop("vmax", 1),
+        "cbar_kws": kwargs.pop("cbar_kws", {"shrink": 0.5}),
+        "fmt": kwargs.pop("fmt", ".2f"),
+        # "xticklabels": kwargs.pop("xticklabels", data.columns),
+        # "yticklabels": kwargs.pop("yticklabels", data.index),
+    }
+
+    ax = sns.heatmap(
+        data,
+        **params,
+        **kwargs,
+    )
+    return ax
+
+
+def clustermap_correlation(
+    data: pd.DataFrame,
+    **kwargs: Dict,
+) -> Axes:
+    params = {
+        "annot": kwargs.pop("annot", True),
+        "square": kwargs.pop("square", True),
+        "linewidths": kwargs.pop("linewidths", 0.5),
+        "cmap": kwargs.pop(
+            "cmap", sns.diverging_palette(230, 20, as_cmap=True)
+        ),
+        "center": kwargs.pop("center", 0),
+        "vmin": kwargs.pop("vmin", -1),
+        "vmax": kwargs.pop("vmax", 1),
+        "cbar_kws": kwargs.pop("cbar_kws", {"shrink": 0.5}),
+        "fmt": kwargs.pop("fmt", ".2f"),
+        # "xticklabels": kwargs.pop("xticklabels", data.columns),
+        # "yticklabels": kwargs.pop("yticklabels", data.index),
+    }
+
+    ax = sns.clustermap(
+        data,
+        **params,
+        **kwargs,
+    )
+    return ax
+
+
 def overlay_reconstruction_error(
     reconstruction_error: pd.DataFrame,
     fig: Figure,

@@ -19,6 +19,7 @@ autopep8 = "^2.0.2"
 altair = "^5.0.0"
 rpy2 = "^3.5.12"
 pandarallel = "^1.6.5"
+pingouin = "^0.5.3"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.2"

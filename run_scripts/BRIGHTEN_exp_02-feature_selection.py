@@ -1,9 +1,9 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
-import scipy.stats as stats
 from tqdm.auto import tqdm
-from pandarallel import pandarallel
+
+# from pandarallel import pandarallel
 import argparse
 
 from mhealth_anomaly_detection import (
@@ -15,8 +15,23 @@ from sklearn.experimental import enable_iterative_imputer  # noqa
 from sklearn.impute import IterativeImputer
 
 STUDY = "BRIGHTEN_v2"
-EXP = "exp01"
+EXP = "exp02"
 out_path = Path("cache", f"{STUDY}_{EXP}.csv")
+
+AD_PARAMS = [
+    {
+        "window_size": 7,
+        "max_missing_days": 2,
+    },
+    {
+        "window_size": 14,
+        "max_missing_days": 2,
+    },
+    {
+        "window_size": 28,
+        "max_missing_days": 4,
+    },
+]
 
 
 def run_anomaly_detection(input) -> pd.DataFrame:
@@ -28,6 +43,7 @@ def run_anomaly_detection(input) -> pd.DataFrame:
         group[re.columns] = re
         return group
 
+    """
     try:
         labeled = data.groupby("subject_id", group_keys=False).parallel_apply(
             ad_apply
@@ -38,7 +54,10 @@ def run_anomaly_detection(input) -> pd.DataFrame:
             detector.name,
         )
         labeled = data.groupby("subject_id", group_keys=False).apply(ad_apply)
+    """
+    labeled = data.groupby("subject_id", group_keys=False).apply(ad_apply)
     labeled["detector"] = detector.name
+    labeled["window_size"] = detector.window_size
     return labeled
 
 
@@ -59,15 +78,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--rerun-cache",
         action="store_true",
-        help="Use cached data",
+        help="Don't use cached data",
     )
 
     args = parser.parse_args()
     num_cpus = args.num_cpus
     rerun_cache = args.rerun_cache
 
-    if num_cpus > 1:
-        pandarallel.initialize(progress_bar=True)
+    # pandarallel.initialize(nb_workers=num_cpus, progress_bar=False)
     # Ignore divide by 0 error -> expected and happens in PCA
     np.seterr(divide="ignore", invalid="ignore")
 
@@ -91,31 +109,33 @@ if __name__ == "__main__":
     data = dataset.data
     features = dataset.features
 
+    if args.debug:
+        num_cpus = 1
+        out_path = Path("cache", f"{STUDY}_{EXP}_DEBUG.csv")
+        rerun_cache = True
+        detectors = [detectors[0]]
+        data = data[data.subject_id.isin(data.subject_id.unique()[:5])]
+        print("Running in debug mode")
+
     # Initialize anomaly detectors with parameters
-    initialized_detectors = [
-        d(
-            features=features,
-            window_size=7,
-            max_missing_days=3,
-            n_components=3,
-            remove_past_anomalies=False,
-            re_std_threshold=1.65,
-        )
-        for d in detectors
-    ]
+    initialized_detectors = []
+    for params in AD_PARAMS:
+        for d in detectors:
+            initialized_detectors.append(
+                d(
+                    features=features,
+                    remove_past_anomalies=False,
+                    re_std_threshold=1.65,
+                    n_components=3,
+                    **params,
+                )
+            )
 
     cache_path = Path("cache", f"{STUDY}_{EXP}_anomaly_labeled.csv")
     if not rerun_cache and cache_path.exists():
         print("Loading from cache...")
         anomaly_labeled = pd.read_csv(cache_path, parse_dates=["date"])
     else:
-        if args.debug:
-            num_cpus = 1
-            out_path = Path("cache", f"{STUDY}_{EXP}_DEBUG.csv")
-            detectors = [detectors[0]]
-            data = data[data.subject_id.isin(data.subject_id.unique()[:5])]
-            print("Running in debug mode")
-
         # Get training data
         train_test_split = dataset.getTrainTestSplit()
         train_sids = train_test_split[
@@ -159,21 +179,16 @@ if __name__ == "__main__":
     sds = dataset.getSelfReport("SDS")
     sds["lookback"] = "7d"
 
-    """ Not enough data for GAD7
+    """ Not enough data for GAD7 or sleep quality
     gad7 = dataset.getSelfReport("GAD7")
     gad7["lookback"] = "7d"
-    """
 
     sleep_quality = dataset.getSelfReport("sleep_quality")
     sleep_quality["lookback"] = "7d"
+    """
 
     self_reports = phq9.merge(
         sds,
-        on=["subject_id", "date", "self_report", "lookback"],
-        validate="1:1",
-        how="outer",
-    ).merge(
-        sleep_quality,
         on=["subject_id", "date", "self_report", "lookback"],
         validate="1:1",
         how="outer",
@@ -185,20 +200,22 @@ if __name__ == "__main__":
     anomaly_cols = []
     for d in initialized_detectors:
         re_cols = [f"{c}_re" for c in dataset.features] + ["total_re"]
-        re_d_cols = [f"{d.name}_{c}" for c in re_cols]
-        self_report_anomalies[f"{d.name}_anomaly_count"] = 0
-        anomaly_cols.append(f"{d.name}_anomaly_count")
+        re_d_cols = [f"{d.name}-{d.window_size}_{c}" for c in re_cols]
+        self_report_anomalies[f"{d.name}-{d.window_size}_anomaly_count"] = 0
+        anomaly_cols.append(f"{d.name}-{d.window_size}_anomaly_count")
 
     for i, row in self_reports.iterrows():
         response_anomalies = anomaly_labeled.loc[
             (anomaly_labeled.subject_id == row.subject_id)
-            & (anomaly_labeled.date <= row.date)
+            & (anomaly_labeled.date < row.date)
             & (anomaly_labeled.date >= (row.date - pd.Timedelta("7d")))
         ]
-        for d, d_df in response_anomalies.groupby("detector"):
+        for (ws, d), d_df in response_anomalies.groupby(
+            ["window_size", "detector"]
+        ):
             set_d = 0
-            re_d_cols = [f"{d}_{c}" for c in re_cols]
-            self_report_anomalies.loc[i, f"{d}_anomaly_count"] = d_df[
+            re_d_cols = [f"{d}-{ws}_{c}" for c in re_cols]
+            self_report_anomalies.loc[i, f"{d}-{ws}_anomaly_count"] = d_df[
                 "anomaly"
             ].sum()
             self_report_anomalies.loc[i, re_d_cols] = (

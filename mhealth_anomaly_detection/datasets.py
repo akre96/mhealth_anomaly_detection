@@ -3,6 +3,7 @@ import numpy as np
 from pathlib import Path
 from typing import List, Literal
 from tqdm.auto import tqdm
+import json
 
 
 class DatasetBase:
@@ -285,6 +286,88 @@ class OPTIMA(DatasetBase):
         data_fmt = data.merge(day1, how="left")
         data_fmt["study_day"] = (data_fmt.date - data_fmt.day1).dt.days
         return data_fmt
+
+    def getSurveyData(
+        self,
+        redcap_data_path: Path,
+        eid_uid_path: Path,
+        survey_info_path: Path = Path("lib/surveys.json"),
+    ) -> pd.DataFrame:
+        with open(survey_info_path, "r") as f:
+            surveys = json.load(f)
+        eid_uid = pd.read_csv(eid_uid_path)
+        eid_uid.columns = ["record_id", "eid"]
+        redcap_data = (
+            pd.concat([pd.read_csv(f) for f in redcap_data_path.glob("*.csv")])
+            .merge(eid_uid, how="left")
+            .rename(columns={"eid": "user_id"})
+        )
+
+        taken_cols = []
+        survey_res = []
+        for _, params in surveys.items():
+            survey = params["name"]
+            start = params["start"]
+            duration = params["duration"]
+            prefix = params["prefix"]
+            if "suffix" in params.keys():
+                suffix = params["suffix"]
+            else:
+                suffix = None
+            if suffix is not None:
+                survey_cols = [
+                    c
+                    for c in redcap_data.columns
+                    if c.startswith(prefix)
+                    and c.endswith(suffix)
+                    and not c.endswith("_end")
+                ]
+            else:
+                survey_cols = [
+                    c
+                    for c in redcap_data.columns
+                    if c.startswith(prefix)
+                    and not c in taken_cols
+                    and not c.endswith("_end")
+                ]
+            if start in survey_cols:
+                survey_cols.remove(start)
+
+            survey_data = redcap_data[
+                survey_cols + [start, "redcap_event_name", "user_id"]
+            ].dropna(subset=[start])
+            survey_data = survey_data.rename(
+                columns={
+                    start: "survey_start",
+                }
+            )
+            for c in survey_cols + [start]:
+                taken_cols.append(c)
+
+            survey_data["survey"] = survey
+            survey_data["duration"] = duration
+            survey_data = survey_data.melt(
+                id_vars=[
+                    "user_id",
+                    "survey",
+                    "survey_start",
+                    "duration",
+                    "redcap_event_name",
+                ],
+                value_name="response",
+                var_name="question",
+            )
+            if suffix is not None:
+                survey_data["question"] = survey_data["question"].str.replace(
+                    suffix, ""
+                )
+            survey_res.append(survey_data)
+        survey_df = pd.concat(survey_res).reset_index(drop=True)
+        survey_df["survey_start"] = pd.to_datetime(survey_df["survey_start"])
+        survey_df["response"] = pd.to_numeric(
+            survey_df["response"], errors="coerce"
+        )
+        return survey_df
 
     def preprocess(self, data_raw) -> pd.DataFrame:
         data_raw = data_raw.rename(columns={"user_id": "subject_id"})
