@@ -372,6 +372,7 @@ class OPTIMA(DatasetBase):
     def preprocess(self, data_raw) -> pd.DataFrame:
         data_raw = data_raw.rename(columns={"user_id": "subject_id"})
         data_raw["date"] = pd.to_datetime(data_raw["date"])
+        data_raw = data_raw.drop(columns=["local_start"])
         self.sensor_cols = [
             c
             for c in data_raw.columns

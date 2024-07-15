@@ -21,6 +21,7 @@ class BaseRollingAnomalyDetector:
         window_size: int = 7,
         max_missing_days: int = 2,
         re_std_threshold: float = 1.65,
+        re_abs_threshold: float = .4,
         remove_past_anomalies: bool = False,
         n_components: int = 0,
     ):
@@ -36,6 +37,7 @@ class BaseRollingAnomalyDetector:
             self.min_periods = 1
 
         self.features = features
+        self.re_abs_threshold = re_abs_threshold
         self.re_std_threshold = re_std_threshold
         self.reconstruction_error: pd.DataFrame = pd.DataFrame()
         self.name = "RollingMean"
@@ -121,7 +123,7 @@ class BaseRollingAnomalyDetector:
                 re_df.iloc[i] = np.abs(reconstruction.iloc[-1] - X.iloc[-1])
 
                 # Clip reconstruction error to 10
-                re_df[re_df > 10] = 10
+                re_df[re_df > 1] = 1
                 total_re = re_df[df_cols].copy().sum(axis=1, min_count=1)
                 use_re = total_re[
                     (total_re.index >= (i - self.window_size))
@@ -137,7 +139,10 @@ class BaseRollingAnomalyDetector:
                         i, "anomaly_label"
                     ] = self.anomalyDecision(use_re)
 
-        re_df["total_re"] = re_df[df_cols].sum(axis=1, min_count=1)
+        # Normalize to # of features
+        re_df["total_re"] = re_df[df_cols].sum(axis=1, min_count=1) / float(len(
+            self.features
+        ))
 
         re_df["study_day"] = subject_data["study_day"]
         self.reconstruction_error = re_df
@@ -164,7 +169,7 @@ class BaseRollingAnomalyDetector:
                 closed="left",
             ).std()
         )
-        return continuous_output.iloc[-1] > anomaly_threshold.iloc[-1]
+        return (continuous_output.iloc[-1] > anomaly_threshold.iloc[-1]) | (continuous_output.iloc[-1] > self.re_abs_threshold)
 
     # Return if anomalous day labels
     def labelAnomaly(
@@ -194,7 +199,7 @@ class BaseRollingAnomalyDetector:
             .std()
         )
         re_df["threshold"] = anomaly_threshold
-        return re_df["total_re"] > re_df["threshold"]
+        return (re_df["total_re"] > re_df["threshold"]) | (re_df["total_re"] > self.re_abs_threshold)
 
 
 class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
@@ -205,6 +210,7 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
         max_missing_days: int = 2,
         n_components: int = 3,
         re_std_threshold: float = 1.65,
+        re_abs_threshold: float = .4,
         remove_past_anomalies: bool = False,
     ):
         super().__init__(
@@ -212,7 +218,9 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
             window_size,
             max_missing_days,
             re_std_threshold,
+            re_abs_threshold,
             remove_past_anomalies,
+            n_components
         )
         self.min_features_changing = 1
         self.n_components = n_components
@@ -312,7 +320,7 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                 re_df.iloc[i] = (np.abs(X_scaled - recon_scaled))[-1]
 
                 # Clip reconstruction error between 10e-10 to 10
-                re_df[re_df > 10] = 10
+                re_df[re_df > 1] = 1
                 re_df[re_df.abs() < 1e-14] = 0
                 if self.remove_past_anomalies:
                     total_re = re_df[df_cols].sum(axis=1, min_count=1)
@@ -325,7 +333,9 @@ class PCARollingAnomalyDetector(BaseRollingAnomalyDetector):
                         i, "anomaly_label"
                     ] = self.anomalyDecision(use_re)
 
-        re_df["total_re"] = re_df.sum(axis=1, min_count=1)
+        re_df["total_re"] = re_df.sum(axis=1, min_count=1) / float(len(
+            self.features
+        ))
         re_df["study_day"] = subject_data["study_day"]
 
         # Store pca components in detector class
@@ -343,6 +353,7 @@ class NMFRollingAnomalyDetector(PCARollingAnomalyDetector):
         max_missing_days: int = 2,
         n_components: int = 3,
         re_std_threshold: float = 1.65,
+        re_abs_threshold: float = .4,
         remove_past_anomalies: bool = False,
     ):
         super().__init__(
@@ -351,6 +362,7 @@ class NMFRollingAnomalyDetector(PCARollingAnomalyDetector):
             max_missing_days,
             n_components,
             re_std_threshold,
+            re_abs_threshold,
             remove_past_anomalies,
         )
         self.model = Pipeline(
@@ -379,6 +391,7 @@ class PCAGridRollingAnomalyDetector(PCARollingAnomalyDetector):
         max_missing_days: int = 2,
         n_components: int = 3,
         re_std_threshold: float = 1.65,
+        re_abs_threshold: float = .4,
         remove_past_anomalies: bool = False,
     ):
         super().__init__(
@@ -387,6 +400,7 @@ class PCAGridRollingAnomalyDetector(PCARollingAnomalyDetector):
             max_missing_days,
             n_components,
             re_std_threshold,
+            re_abs_threshold,
             remove_past_anomalies,
         )
         self.model = Pipeline(
@@ -402,6 +416,8 @@ class PCAGridRollingAnomalyDetector(PCARollingAnomalyDetector):
             str_nc = f"00{str_nc}"
         elif n_components < 100:
             str_nc = f"0{str_nc}"
+        else:
+            str_nc = str(n_components)
 
         self.name = "PCAgrid" + "_" + str_nc
 

@@ -21,6 +21,7 @@ def despine_thicken_axes(
     xlabel_fontsize: float = None,
     ylabel_fontsize: float = None,
     heatmap: bool = False,
+    grid: bool = False,
 ):
     """Despine axes, rotate x or y, thicken axes
 
@@ -37,8 +38,12 @@ def despine_thicken_axes(
         ax -- modified input axis
     """
     # Change axis tick thickness
-    ax.xaxis.set_tick_params(width=lw, length=lw * 2)
-    ax.yaxis.set_tick_params(width=lw, length=lw * 2)
+    ax.xaxis.set_tick_params(width=lw, length=lw * 2, color='black')
+    ax.yaxis.set_tick_params(width=lw, length=lw * 2, color='black')
+    ax.spines['top'].set_color('black')
+    ax.spines['bottom'].set_color('black')
+    ax.spines['left'].set_color('black')
+    ax.spines['right'].set_color('black')
 
     # Make axis lines thicker
     for axis in ["top", "bottom", "left", "right"]:
@@ -72,4 +77,8 @@ def despine_thicken_axes(
         ax.tick_params(axis=var, which="major", labelsize=fs)
         ax.tick_params(axis=var, which="minor", labelsize=fs * 0.8)
         ax.tick_params(axis=var, rotation=rot)
+    if grid:
+        ax.grid(True, which="both", axis="both", linestyle="--", alpha=0.5)
+    else:
+        ax.grid(False)
     return ax

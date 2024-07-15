@@ -23,7 +23,7 @@ from sklearn.experimental import enable_iterative_imputer  # noqa
 from sklearn.impute import IterativeImputer
 
 # Meta params
-NUM_CPUS = 10
+NUM_CPUS = 8
 MAX_MISSING_DAYS = 2
 EXPERIMENT = "OPTIMA_exp01"
 
@@ -47,11 +47,11 @@ if __name__ == "__main__":
     # Load OPTIMA processed healthkit features
     folder = Path("cache")
     dataset = datasets.OPTIMA(
-        data_path="/Users/sakre/Data/OPTIMA/hk_features_Jul05-2023.csv"
+        data_path="/Users/sakre/Data/OPTIMA/OPTIMA_HealthKit/hk_features_Jun03-2024.csv"
     )
     data = dataset.data
     features = dataset.sensor_cols
-
+    features = [f for f in features if "nonsleep-rest" not in f]
     # Impute missing values
     print("\nImputing dataset")
     imputer = IterativeImputer(
@@ -127,8 +127,12 @@ if __name__ == "__main__":
 
         ad = []
         # Run AD per subject
-        for s in imputed.groupby("subject_id"):
-            ad.append(detectAnomalies(s))
+        if PARALLEL:
+            # parallelize
+            ad = p_map(detectAnomalies, imputed.groupby("subject_id"), num_cpus=NUM_CPUS)
+        else:
+            for s in imputed.groupby("subject_id"):
+                ad.append(detectAnomalies(s))
         ad = pd.concat(ad)
 
         # Add anomalies to full list
